@@ -66,7 +66,27 @@ class EpsilonGreedyAgent(Agent):
     def update(self, action: int, reward: float):
         self.N[action] += 1
         self.Q[action] += (1/self.N[action]) * (reward - self.Q[action])
+
+class UCBAgent(Agent):
+    def __init__(self, name: str, k: int, c: float):
+        assert 0 <= c <= 1.0
+        super().__init__(name, k)
+        self.Q = np.zeros(self.k, dtype=float)
+        self.N = np.zeros(self.k, dtype=int)
+        self.UCB = np.full(self.k, np.inf, dtype=float)
+
+        self.c = c
+        self.t = 0
+
+    def select_action(self) -> int:
+        return int(np.argmax(self.UCB))
     
+    def update(self, action: int, reward: float):
+        self.t += 1
+        self.N[action] += 1
+        self.Q[action] += (1/self.N[action]) * (reward - self.Q[action])
+        self.UCB[action] = self.Q[action] + self.c * (np.log(self.t)/self.N[action]) ** 0.5
+
 def main():
     bandit = BernoulliBandit.create("BernoulliBandit", 10)
     agent = GreedyAgent("GreedyAgent", bandit.k)
@@ -83,6 +103,14 @@ def main():
         reward = bandit2.sample(action)
         agent2.update(action, reward)
     Bandit.print_stats(bandit2.calculate_stats(), freq=50)
+
+    bandit3 = BernoulliBandit.create("BernoulliBandit3", 10)
+    agent3 = UCBAgent("UCB", bandit3.k, c=0.1)
+    for _ in range(500):
+        action = agent3.select_action()
+        reward = bandit3.sample(action)
+        agent3.update(action, reward)
+    Bandit.print_stats(bandit3.calculate_stats(), freq=50)
 
 if __name__ == "__main__":
     main()
