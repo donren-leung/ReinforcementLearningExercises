@@ -53,5 +53,11 @@ def main():
     for stats in all_stats:
         Bandit.print_stats(stats, freq=50)
 
+    run_factory1 = RunFactory(BernoulliBandit, {"name": "BernoulliBandit", "k": 10},
+                                EpsilonGreedyAgent, {"name": "EpsilonGreedyAgent-e0.1", "epsilon": 0.1})
+    run_factory2 = RunFactory(BernoulliBandit, {"name": "BernoulliBandit", "k": 10},
+                                EpsilonGreedyAgent, {"name": "EpsilonGreedyAgent-e0.2", "epsilon": 0.2})
+    # etc.
+
 if __name__ == "__main__":
     main()

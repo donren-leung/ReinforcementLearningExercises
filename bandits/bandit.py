@@ -28,30 +28,32 @@ class Bandit(ABC):
 
     def calculate_stats(self) -> list[tuple[float, float, float]]:
         """
-        Given history of actions and rewards, calculate statistics for each time step:
-        - Average reward over time steps
-        - % Optimal action over time steps
-        - Cumulative regret over time steps
-        - Sensitivity to hyperparameters (although not here)
-        """
-        self.total_reward = 0.0
-        self.optim_action_count = 0
-        self.cumulative_regret = 0.0
+        Return per-step instantaneous stats.
 
-        history_stats = []
-        for t, (action, reward) in enumerate(self.log, start=1):
-            self.total_reward += reward
-            if action == self.optim_action:
-                self.optim_action_count += 1
-            self.cumulative_regret += self.action_values[self.optim_action] - self.action_values[action]
-            history_stats.append((self.total_reward / t, self.optim_action_count / t, self.cumulative_regret))
-        
+        Each element is a tuple: (reward, is_optimal, instant_regret)
+        - reward: observed reward at time t
+        - is_optimal: 1.0 if chosen action == optimal action else 0.0
+        - instant_regret: v* - q(a) for this step
+        """
+        history_stats: list[tuple[float, float, float]] = []
+        for (action, reward) in self.log:
+            is_optimal = int(action == self.optim_action)
+            instant_regret = self.action_values[self.optim_action] - self.action_values[action]
+            history_stats.append((reward, is_optimal, instant_regret))
         return history_stats
     
     @classmethod
     def print_stats(cls, stats: list[tuple[float, float, float]], freq: int=10):
-        for t, (avg_reward, optimal_action_pct, cumulative_regret) in enumerate(stats, start=1):
+        total_reward = 0.0
+        optim_action_count = 0
+        cumulative_regret = 0.0
+        for t, (reward, is_opt, instant_regret) in enumerate(stats, start=1):
+            total_reward += reward
+            optim_action_count += is_opt
+            cumulative_regret += instant_regret
             if t % freq == 0:  # Print stats every 10 time steps
+                avg_reward = total_reward / t
+                optimal_action_pct = optim_action_count / t
                 print(f"Time Step {t}: Avg Reward={avg_reward:.2f}, % Optimal Action={optimal_action_pct:.2%}, Cumulative Regret={cumulative_regret:.2f}")
 
 class BernoulliBandit(Bandit):
