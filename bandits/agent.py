@@ -97,6 +97,42 @@ class UCBAgent(Agent):
         self.Q[action] += (1/self.N[action]) * (reward - self.Q[action])
         self.UCB[action] = self.Q[action] + self.c * (np.log(self.t)/self.N[action]) ** 0.5
 
+def softmax(x):
+    e_x = np.exp(x - np.max(x))
+    return e_x / e_x.sum(axis=-1, keepdims=True)
+
+class PolicyGradientAgent(Agent):
+    def __init__(self, name: str, k: int, alpha: float, use_baseline: bool):
+        super().__init__(name, k)
+        self.alpha = alpha
+        self.use_baseline = use_baseline
+        
+        self.t = 0
+        self.baseline = 0.0
+        self.H = np.zeros(self.k, dtype=np.float64)
+        self.probs = softmax(self.H)
+
+    def select_action(self) -> int:
+        return int(np.random.choice(self.k, p=self.probs))
+
+    def update(self, action: int, reward: float):
+        """
+        For A_t:
+            H_t+1(A_t) = H_t(A_t) + alpha (R_t - R_baseline_t) (1 - pi_t(A_t))
+        For all a != A_t:
+            H_t+1(a) = H_t(a) - alpha (R_t - R_baseline_t) pi_t(a)
+        """
+        advantage = reward - self.baseline if self.use_baseline else reward
+
+        self.H -= self.alpha * advantage * self.probs
+        self.H[action] += self.alpha * advantage
+        self.probs = softmax(self.H)
+
+        # Finally, update baseline
+        if self.use_baseline:
+            self.t += 1
+            self.baseline += (1/self.t) * (reward - self.baseline)
+
 def main():
     bandit = BernoulliBandit.create("BernoulliBandit", 10)
     agent = GreedyAgent("GreedyAgent", bandit.k)
@@ -121,6 +157,14 @@ def main():
         reward = bandit3.sample(action)
         agent3.update(action, reward)
     Bandit.print_stats(bandit3.calculate_stats(), freq=50)
+
+    bandit4 = BernoulliBandit.create("BernoulliBandit4", 10)
+    agent4 = PolicyGradientAgent("PolicyGradient", bandit4.k, alpha=0.1, use_baseline=False)
+    for _ in range(500):
+        action = agent4.select_action()
+        reward = bandit4.sample(action)
+        agent4.update(action, reward)
+    Bandit.print_stats(bandit4.calculate_stats(), freq=50)
 
 if __name__ == "__main__":
     main()

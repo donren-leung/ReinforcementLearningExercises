@@ -3,7 +3,7 @@ from typing import Callable, Tuple
 import os
 
 from bandit import Bandit, BernoulliBandit, GaussianBandit
-from agent import Agent, RandomAgent, GreedyAgent, EpsilonGreedyAgent, UCBAgent
+from agent import Agent, RandomAgent, GreedyAgent, EpsilonGreedyAgent, UCBAgent, PolicyGradientAgent
 from simulation import RunFactory, Simulation
 from visualize import aggregate_stats, plot_metric, plot_three_metrics
 
@@ -127,23 +127,59 @@ def figure2_4a(results_folder: str, sims: int, sim_length: int, ucb_cs: list[flo
                         y_ticks=[(0, 1.5, 0.5), (0, 100, 20), (0, None, 100)],
                         colors=None, figsize=(12, 16))
 
+def figure2_5(results_folder: str, sims: int, sim_length: int, baseline: float):
+    print(f"Running figure2_5a with {sims} simulations and {sim_length} steps each...")
+    aggs = []
+    for use_baseline in [False, True]:
+        run_factory = RunFactory(GaussianBandit, {"name": "GaussianBandit", "k": 10, "action_mean": baseline},
+                                PolicyGradientAgent, {"name": "PolicyGradientAgent", "alpha": 0.1, "use_baseline": use_baseline})
+        sim = Simulation(run_factory, sims=sims, sim_length=sim_length)
+        all_stats = sim.simulate_all(workers=WORKERS)
+        agg = aggregate_stats(all_stats)
+        aggs.append(agg)
+
+        run_factory = RunFactory(GaussianBandit, {"name": "GaussianBandit", "k": 10, "action_mean": baseline},
+                                PolicyGradientAgent, {"name": "PolicyGradientAgent", "alpha": 0.4, "use_baseline": use_baseline})
+        sim = Simulation(run_factory, sims=sims, sim_length=sim_length)
+        all_stats = sim.simulate_all(workers=WORKERS)
+        agg2 = aggregate_stats(all_stats)
+        aggs.append(agg2)
+
+    plot_three_metrics(aggs, [f"alpha=0.1, no baseline", "alpha=0.4, no baseline", "alpha=0.1, baseline", "alpha=0.4, baseline"],
+                       out_path=f"{results_folder}/policy_gradient_base{baseline}_gaussian_{sims}_{sim_length}.png",
+                       graph_title=f"Effect of baseline on μ={baseline} Gaussian bandits ({sims} runs, {sim_length} steps)",
+                        stds=[], y_lims=[(-0.2+baseline, 1.6+baseline),(0, 100), (0, None)], x_lims=[(0, sim_length)]*3,
+                        y_ticks=[(0+baseline, 1.6+baseline, 0.5), (0, 100, 20), (0, None, 100)],
+                        colors=["peru", "burlywood", "blue", "skyblue"], figsize=(12, 16))
 if __name__ == "__main__":
     results_folder = "results"
     # ensure results folder exists
     os.makedirs(results_folder, exist_ok=True)
 
-    # figure2_2(results_folder, 100, 1000)
-    # figure2_2(results_folder, 500, 1000)
-    # figure2_2(results_folder, 2000, 1000)
+    # Epsilon greedy
+    figure2_2(results_folder, 100, 1000)
+    figure2_2(results_folder, 500, 1000)
+    figure2_2(results_folder, 2000, 1000)
 
+    # # More epsilons, longer runs
     # figure2_2a(results_folder, 500, 1000)
     # figure2_2a(results_folder, 500, 10000)
 
-    # figure2_3(results_folder, 500, 1000)
-    # figure2_3(results_folder, 2000, 1000)
+    # Optimistic greedy
+    figure2_3(results_folder, 500, 1000)
+    figure2_3(results_folder, 2000, 1000)
 
+    # UCB
     figure2_4(results_folder, 500, 1000)
     figure2_4(results_folder, 2000, 1000)
 
+    # More UCB c-values
     figure2_4a(results_folder, 500, 1000, [0.5, 1.0, 2.0, 3.0])
     figure2_4a(results_folder, 2000, 1000, [0.5, 1.0, 2.0, 3.0])
+
+    # Policy gradient with and without baseline, with different alphas
+    figure2_5(results_folder, 500, 1000, 0)
+    figure2_5(results_folder, 2000, 1000, 0)
+
+    figure2_5(results_folder, 500, 1000, 4)
+    figure2_5(results_folder, 2000, 1000, 4)
