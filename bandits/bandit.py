@@ -26,6 +26,14 @@ class Bandit(ABC):
         # self.log.append((action, reward))
         # return reward
 
+    @classmethod
+    @abstractmethod
+    def create(cls, *args, **kwargs) -> 'Bandit':
+        """
+        Factory method to create a new bandit instance with the given parameters.
+        """
+        raise NotImplementedError("Subclasses must implement this method")
+
     def calculate_stats(self) -> list[tuple[float, float, float]]:
         """
         Return per-step instantaneous stats.

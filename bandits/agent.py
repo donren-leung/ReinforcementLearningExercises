@@ -37,9 +37,11 @@ class RandomAgent(Agent):
         return
 
 class GreedyAgent(Agent):
-    def __init__(self, name: str, k: int):
+    def __init__(self, name: str, k: int, Q1: float=0, alpha: float | None=None):
+        assert alpha is None or 0 < alpha <= 1
         super().__init__(name, k)
-        self.Q = np.zeros(self.k, dtype=float)
+        self.alpha = alpha
+        self.Q = np.ones(self.k, dtype=float) * Q1
         self.N = np.zeros(self.k, dtype=int)
 
     def select_action(self) -> int:
@@ -47,13 +49,18 @@ class GreedyAgent(Agent):
     
     def update(self, action: int, reward: float):
         self.N[action] += 1
-        self.Q[action] += (1/self.N[action]) * (reward - self.Q[action])
+        if self.alpha:
+            self.Q[action] += self.alpha * (reward - self.Q[action])
+        else:
+            self.Q[action] += (1/self.N[action]) * (reward - self.Q[action])
 
 class EpsilonGreedyAgent(Agent):
-    def __init__(self, name: str, k: int, epsilon: float):
+    def __init__(self, name: str, k: int, epsilon: float, Q1: float=0, alpha: float | None=None):
         assert 0 <= epsilon <= 1.0
+        assert alpha is None or 0 < alpha <= 1
         super().__init__(name, k)
-        self.Q = np.zeros(self.k, dtype=float)
+        self.alpha = alpha
+        self.Q = np.ones(self.k, dtype=float) * Q1
         self.N = np.zeros(self.k, dtype=int)
         self.epsilon = epsilon
 
@@ -65,11 +72,14 @@ class EpsilonGreedyAgent(Agent):
     
     def update(self, action: int, reward: float):
         self.N[action] += 1
-        self.Q[action] += (1/self.N[action]) * (reward - self.Q[action])
+        if self.alpha:
+            self.Q[action] += self.alpha * (reward - self.Q[action])
+        else:
+            self.Q[action] += (1/self.N[action]) * (reward - self.Q[action])
 
 class UCBAgent(Agent):
     def __init__(self, name: str, k: int, c: float):
-        assert 0 <= c <= 1.0
+        assert 0 < c
         super().__init__(name, k)
         self.Q = np.zeros(self.k, dtype=float)
         self.N = np.zeros(self.k, dtype=int)

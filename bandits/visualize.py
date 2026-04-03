@@ -25,7 +25,7 @@ def aggregate_stats(all_stats: Sequence[Sequence[Tuple[float, float, float]]]) -
         raise ValueError("all_stats must be shape (n_runs, n_steps, 3)")
 
     rewards = arr[:, :, 0]           # shape (n_runs, n_steps)
-    is_opt = arr[:, :, 1]            # shape (n_runs, n_steps), 0/1
+    is_opt = arr[:, :, 1] * 100      # shape (n_runs, n_steps), 0%/100%
     instant_regrets = arr[:, :, 2]   # shape (n_runs, n_steps)
 
     # instantaneous statistics (averaged across runs)
@@ -62,7 +62,7 @@ def plot_metric(ax: Axes,
         for s in stds:
             ax.fill_between(time, mean - s * std, mean + s * std, color=color, alpha=alpha)
             alpha /= 2
-    ax.legend()
+    ax.legend(loc='lower right')
     ax.grid(True)
 
 def plot_three_metrics(aggregated_results: Sequence[Dict[str, Any]],
@@ -72,6 +72,8 @@ def plot_three_metrics(aggregated_results: Sequence[Dict[str, Any]],
                        figsize: Tuple[int, int] = (12, 9),
                        x_lims: Optional[Sequence[Tuple[Optional[float], Optional[float]]]] = None,
                        y_lims: Optional[Sequence[Tuple[Optional[float], Optional[float]]]] = None,
+                       y_ticks: Optional[Sequence[Tuple[float, Optional[float], float]]] = None,
+                       graph_title: Optional[str] = None,
                        **kwargs) -> Figure:
     """
     Plot three stacked metrics (Average reward, % Optimal action, Cumulative regret)
@@ -84,6 +86,7 @@ def plot_three_metrics(aggregated_results: Sequence[Dict[str, Any]],
         out_path: if provided, figure is saved to this path.
         figsize: figure size.
         y_lims: optional list of y-axis limits (one per subplot).
+        y_ticks: optional list of y-axis ticks (one per subplot).
         **kwargs: additional arguments passed to `plot_metric`.
 
     Returns:
@@ -101,8 +104,8 @@ def plot_three_metrics(aggregated_results: Sequence[Dict[str, Any]],
             raise ValueError("All aggregated_results must have the same 'n_steps'")
     time = np.arange(n_steps)
     if colors is None:
-        cmap = plt.get_cmap("tab10")
-        colors = [cmap(i % 10) for i in range(n)]
+        cmap = plt.get_cmap("cool")
+        colors = [cmap(i / n) for i in range(n)]
 
     fig, axes = plt.subplots(3, 1, figsize=figsize, sharex=True)
     metrics = [("avg_reward", "Average reward"), ("opt_action", "% Optimal action"), ("cumulative_regret", "Cumulative regret")]
@@ -111,12 +114,14 @@ def plot_three_metrics(aggregated_results: Sequence[Dict[str, Any]],
             mean = np.asarray(agg[key]["mean"])
             std = np.asarray(agg[key]["std"])
             plot_metric(ax, time, mean, std, labels[idx], colors[idx], **kwargs)
-    axes[0].set_title("Average reward")
-    axes[0].set_ylabel("Reward")
-    axes[1].set_title("% Optimal action")
-    axes[1].set_ylabel("Fraction")
-    axes[2].set_title("Cumulative regret")
-    axes[2].set_ylabel("Regret")
+
+    if graph_title:
+        # add some vertical space at the top for the title, padding below
+        fig.suptitle(graph_title, fontsize=18)
+
+    axes[0].set_ylabel("Average\nReward", rotation=0, labelpad=40, fontsize=14)
+    axes[1].set_ylabel("%\nOptimal\nAction", rotation=0, labelpad=40, fontsize=14)
+    axes[2].set_ylabel("Cumulative\nRegret", rotation=0, labelpad=40, fontsize=14)
     axes[2].set_xlabel("Time step")
 
     if x_lims:
@@ -124,10 +129,30 @@ def plot_three_metrics(aggregated_results: Sequence[Dict[str, Any]],
             ax.set_xlim(lower, upper)
 
     if y_lims:
-        for ax, (lower, upper) in zip(axes, y_lims):
+        for i, (lower, upper) in enumerate(y_lims):
+            ax = axes[i]
+            key = metrics[i][0]
+            if upper is None:
+                # base upper on mean + std across all series
+                max_val = max((np.asarray(agg[key]["mean"]).max()) for agg in aggregated_results)
+                # if ticks provided with a step, round up to nearest step
+                if y_ticks and y_ticks[i] and y_ticks[i][2]:
+                    step = float(y_ticks[i][2])
+                    upper = float(int(np.ceil(max_val / step)) * step)
+                else:
+                    upper = max_val * 1.05
             ax.set_ylim(lower, upper)
 
-    fig.tight_layout()
+    if y_ticks:
+            for i, ticks in enumerate(y_ticks):
+                ax = axes[i]
+                if ticks:
+                    start, stop, step = ticks
+                    if stop is None:
+                        stop = ax.get_ylim()[1]
+                    ax.set_yticks(np.arange(start, stop + step, step))
+
+    fig.tight_layout(rect=[0, 0, 1, 0.97])
     if out_path:
         fig.savefig(out_path, dpi=200)
     return fig
