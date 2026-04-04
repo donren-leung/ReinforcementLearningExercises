@@ -32,21 +32,21 @@ class RandomAgent(Agent):
 
     def select_action(self) -> int:
         return int(np.random.randint(0, self.k))
-    
+
     def update(self, action: int, reward: float) -> None:
         return
 
 class GreedyAgent(Agent):
-    def __init__(self, name: str, k: int, Q1: float=0, alpha: float | None=None):
+    def __init__(self, name: str, k: int, Q0: float=0, alpha: float | None=None):
         assert alpha is None or 0 < alpha <= 1
         super().__init__(name, k)
         self.alpha = alpha
-        self.Q = np.ones(self.k, dtype=float) * Q1
+        self.Q = np.full(self.k, Q0, dtype=float)
         self.N = np.zeros(self.k, dtype=int)
 
     def select_action(self) -> int:
         return int(np.argmax(self.Q))
-    
+
     def update(self, action: int, reward: float):
         self.N[action] += 1
         if self.alpha:
@@ -55,12 +55,12 @@ class GreedyAgent(Agent):
             self.Q[action] += (1/self.N[action]) * (reward - self.Q[action])
 
 class EpsilonGreedyAgent(Agent):
-    def __init__(self, name: str, k: int, epsilon: float, Q1: float=0, alpha: float | None=None):
+    def __init__(self, name: str, k: int, epsilon: float, Q0: float=0, alpha: float | None=None):
         assert 0 <= epsilon <= 1.0
         assert alpha is None or 0 < alpha <= 1
         super().__init__(name, k)
         self.alpha = alpha
-        self.Q = np.ones(self.k, dtype=float) * Q1
+        self.Q = np.full(self.k, Q0, dtype=float)
         self.N = np.zeros(self.k, dtype=int)
         self.epsilon = epsilon
 
@@ -69,7 +69,7 @@ class EpsilonGreedyAgent(Agent):
             return int(np.random.randint(0, self.k))
         else:
             return int(np.argmax(self.Q))
-    
+
     def update(self, action: int, reward: float):
         self.N[action] += 1
         if self.alpha:
@@ -90,7 +90,7 @@ class UCBAgent(Agent):
 
     def select_action(self) -> int:
         return int(np.argmax(self.UCB))
-    
+
     def update(self, action: int, reward: float):
         self.t += 1
         self.N[action] += 1
@@ -106,10 +106,10 @@ class PolicyGradientAgent(Agent):
         super().__init__(name, k)
         self.alpha = alpha
         self.use_baseline = use_baseline
-        
+
         self.t = 0
         self.baseline = 0.0
-        self.H = np.zeros(self.k, dtype=np.float64)
+        self.H = np.zeros(self.k, dtype=float)
         self.probs = softmax(self.H)
 
     def select_action(self) -> int:
@@ -132,6 +132,37 @@ class PolicyGradientAgent(Agent):
         if self.use_baseline:
             self.t += 1
             self.baseline += (1/self.t) * (reward - self.baseline)
+
+class GaussianThompsonAgent(Agent):
+    def __init__(self, name: str, k: int, prior_mean=0.0, prior_var=1.0, reward_var=1.0):
+        self.k = k
+        self.m = np.full(k, prior_mean, dtype=float)
+        self.v = np.full(k, prior_var, dtype=float)
+        self.reward_var = reward_var
+
+    def select_action(self) -> int:
+        """
+        Thompson sampling:
+        1. Sample Q_t(a) ~ p_t(q(a))
+        2. Select action maximising sample, A_t = argmax Q_t(a)
+
+        Probability matching means
+        "select action a according to the probability (belief) that a is optimal"
+        pi_t(a) = p(q(a) = max a' [q(a')] | H_t-1)
+        """
+        sampled_means = np.random.normal(self.m, np.sqrt(self.v))
+        return int(np.argmax(sampled_means))
+
+    def update(self, action: int, reward: float):
+        m = self.m[action]
+        v = self.v[action]
+        sigma2 = self.reward_var
+
+        v_new = 1.0 / (1.0 / v + 1.0 / sigma2)
+        m_new = v_new * (m / v + reward / sigma2)
+
+        self.m[action] = m_new
+        self.v[action] = v_new
 
 def main():
     bandit = BernoulliBandit.create("BernoulliBandit", 10)
