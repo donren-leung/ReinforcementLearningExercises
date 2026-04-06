@@ -1,51 +1,103 @@
-from environments.AbstractEnvironment import AbstractEnvironment, StateT, ActionT
-from environments.EscapeGridWorld import EscapeGridWorldEnv
-from agent import RandomAgent
+from pathlib import Path
+from typing import Any, cast
+import sys
 
-def visualise_policy_evaluation(env: AbstractEnvironment[StateT, ActionT],
-                                V_0: dict[StateT, float],
-                                policy: dict[StateT, dict[ActionT, float]],
-                                visualise_steps: list[int],
-                                threshold: float=0.01) -> None:
-    k = 0
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
+
+from dp.environments.GridWorld import GridWorldEnv, EscapeGridWorldEnv, GridLoc
+from dp.agent import RandomAgent, CustomAgent
+
+def record_policy_evaluation(env: GridWorldEnv,
+                             V_0: dict[GridLoc, float],
+                             policy: dict[GridLoc, dict[str, float]],
+                             visualise_steps: list[int],
+                             threshold: float=0.01) -> list[tuple[int, dict[GridLoc, float]]]:
+    """
+    Run iterative policy evaluation until convergence (based on the given threshold).
+    Args: an environment, a policy and an initial value function.
+
+    Returns: a list of (step, V) pairs for visualisation at the specified steps.
+    """
+    # list of (step, V) pairs to visualise
+    snapshots: list[tuple[int, dict[GridLoc, float]]] = []
+    
     V_curr = V_0
+    k = 0
     while True:
         if k in visualise_steps:
-            print("Visualising policy evaluation at step", k)
-            env.visualise_value(V_curr)
-            print("Visualising greedy policy at step", k)
-            env.visualise_greedy_policy(V_curr)
+            snapshots.append((k, V_curr.copy()))
 
         V_new = env.do_policy_eval_iter(policy, V_curr)
         if max(abs(new_value - V_curr[s]) for s, new_value in V_new.items()) < threshold:
             break
         V_curr = V_new
-
         k += 1
 
-    if k != visualise_steps[-1]:
-        print("Visualising policy evaluation at final step", k)
-        env.visualise_value(V_curr)
-        print("Visualising greedy policy at final step", k)
-        env.visualise_greedy_policy(V_curr)
+    if k not in visualise_steps:
+        snapshots.append((k, V_new.copy()))
 
-def main():
+    return snapshots
+
+def visualise_snapshots(snapshots: list[tuple[int, dict[GridLoc, float]]], env: GridWorldEnv, path: Path, policy_name: str) -> None:
+    n = len(snapshots)
+    width, height = env.size
+    fig, axs = plt.subplots(
+        nrows=n,
+        ncols=2,
+        squeeze=False,
+        figsize=(width * 2 * 1.5, height * n),
+    )
+    axs = cast(np.ndarray[Any, Any], axs)
+
+    axs[0, 0].set_title(f"v_k for {policy_name}", fontsize=18)
+    axs[0, 1].set_title("Greedy Policy w.r.t. v_k", fontsize=18)
+
+    for row_idx, (step, V) in enumerate(snapshots):
+        print("Visualising policy evaluation at step", step)
+        env.visualise_value(V, ax=axs[row_idx, 0])
+        print("Visualising greedy policy at step", step)
+        env.visualise_greedy_policy(V, ax=axs[row_idx, 1])
+        axs[row_idx, 0].set_ylabel(f"k = {step}", rotation=0, fontsize=18, labelpad=40, va="center")
+
+    fig.tight_layout()
+    fig.savefig(path)
+
+def main(results_folder: Path):
     REWARD = -1.0
     env = EscapeGridWorldEnv((4, 4), [(0, 0), (3, 3)], reward=REWARD)
     agent = RandomAgent(env)
 
-    visualise_policy_evaluation(
+    snapshots = record_policy_evaluation(
         env,
         {s: 0.0 for s in env.states}, 
         agent.full_policy(), 
         visualise_steps=[0, 1, 2, 3, 10],
         threshold=0.0001
     )
+    visualise_snapshots(snapshots, env, results_folder / "policy_evaluation.png", "Random Policy")
 
-    # V = env.do_policy_eval(agent.full_policy(), {s: 0.0 for s in env.states}, threshold=0.0001)
-    # for row in range(env.size[1]):
-    #     print(" ".join(f"{V[(col, row)]:>6.2f}" for col in range(env.size[0])))
-    
+    best_V = snapshots[-1][1]
+    iter_policy = env.do_policy_improvement(best_V)
+
+    print(best_V)
+    print(iter_policy)
+
+    custom_agent = CustomAgent(env, iter_policy)
+
+    snapshots = record_policy_evaluation(
+        env,
+        best_V, 
+        custom_agent.full_policy(), 
+        visualise_steps=[0, 1, 2, 3, 10],
+        threshold=0.0001
+    )
+    visualise_snapshots(snapshots, env, results_folder / "policy_iteration.png", "1st Iteration Policy")
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) != 2:
+        print("Usage: python main.py <results_folder>")
+        sys.exit(1)
+
+    main(Path(sys.argv[1]))
