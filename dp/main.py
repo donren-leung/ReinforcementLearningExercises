@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 
-from dp.environments.GridWorld import GridWorldEnv, EscapeGridWorldEnv, GridLoc
+from dp.environments.GridWorld import GridWorldEnv, EscapeGridWorldEnv, GridLoc, JumpingGridWorldEnv
 from dp.agent import RandomAgent, CustomAgent
 
 def record_policy_evaluation(env: GridWorldEnv,
@@ -22,7 +22,7 @@ def record_policy_evaluation(env: GridWorldEnv,
     """
     # list of (step, V) pairs to visualise
     snapshots: list[tuple[int, dict[GridLoc, float]]] = []
-    
+
     V_curr = V_0
     k = 0
     while True:
@@ -71,8 +71,8 @@ def main(results_folder: Path):
 
     snapshots = record_policy_evaluation(
         env,
-        {s: 0.0 for s in env.states}, 
-        agent.full_policy(), 
+        {s: 0.0 for s in env.states},
+        agent.full_policy(),
         visualise_steps=[0, 1, 2, 3, 10],
         threshold=0.0001
     )
@@ -88,16 +88,92 @@ def main(results_folder: Path):
 
     snapshots = record_policy_evaluation(
         env,
-        best_V, 
-        custom_agent.full_policy(), 
+        best_V,
+        custom_agent.full_policy(),
         visualise_steps=[0, 1, 2, 3, 10],
         threshold=0.0001
     )
     visualise_snapshots(snapshots, env, results_folder / "policy_iteration.png", "1st Iteration Policy")
 
+def main2(results_folder: Path):
+    REWARD = 0.0
+    OOB_REWARD = -1.0
+    GAMMA = 0.9
+    env = JumpingGridWorldEnv((5, 5), [((1, 0), (1, 4), 10.0), ((3, 0), (3, 2), 5.0)], reward=REWARD, oob_reward=OOB_REWARD, gamma=GAMMA)
+
+    print(env.jumps)
+    print(env.rewards)
+
+    agent = RandomAgent(env)
+
+    snapshots = record_policy_evaluation(
+        env,
+        {s: 0.0 for s in env.states},
+        agent.full_policy(),
+        visualise_steps=[0, 1, 2, 3, 10],
+        threshold=0.0001
+    )
+    visualise_snapshots(snapshots, env, results_folder / "jumping_grid_policy_evaluation.png", "Random Policy")
+
+    best_V = snapshots[-1][1]
+    iter_policy = env.do_policy_improvement(best_V)
+
+    print(best_V)
+    print(iter_policy)
+
+    custom_agent = CustomAgent(env, iter_policy)
+
+    snapshots = record_policy_evaluation(
+        env,
+        best_V,
+        custom_agent.full_policy(),
+        visualise_steps=[0, 1, 2, 3, 10],
+        threshold=0.0001
+    )
+    visualise_snapshots(snapshots, env, results_folder / "jumping_grid_policy_iteration1.png", "1st Iteration Policy")
+
+    best_V = snapshots[-1][1]
+    iter_policy = env.do_policy_improvement(best_V)
+
+    print(best_V)
+    print(iter_policy)
+
+    custom_agent = CustomAgent(env, iter_policy)
+
+    snapshots = record_policy_evaluation(
+        env,
+        best_V,
+        custom_agent.full_policy(),
+        visualise_steps=[0, 1, 2, 3, 10],
+        threshold=0.0001
+    )
+    visualise_snapshots(snapshots, env, results_folder / "jumping_grid_policy_iteration2.png", "2nd Iteration Policy")
+
+    best_V = snapshots[-1][1]
+    iter_policy = env.do_policy_improvement(best_V)
+
+    print(best_V)
+    print(iter_policy)
+
+    custom_agent = CustomAgent(env, iter_policy)
+
+    snapshots = record_policy_evaluation(
+        env,
+        best_V,
+        custom_agent.full_policy(),
+        visualise_steps=[0, 1, 2, 3, 10],
+        threshold=0.0001
+    )
+    visualise_snapshots(snapshots, env, results_folder / "jumping_grid_policy_iteration3.png", "3rd Iteration Policy")
+
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python main.py <results_folder>")
+    if len(sys.argv) != 3:
+        print("Usage: python main.py [escape|jumping] <results_folder>")
         sys.exit(1)
 
-    main(Path(sys.argv[1]))
+    if sys.argv[1] == "jumping":
+        main2(Path(sys.argv[2]))
+    elif sys.argv[1] == "escape":
+        main(Path(sys.argv[2]))
+    else:
+        raise ValueError(f"Unknown environment {sys.argv[1]}. Expected 'escape' or 'jump'.")
