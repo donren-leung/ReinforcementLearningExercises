@@ -1,7 +1,7 @@
 from abc import abstractmethod, ABC
 from typing import Generic
 
-from dp.environments.AbstractEnvironment import AbstractEnvironment, StateT, ActionT
+from dp.environments.AbstractEnvironment import AbstractEnvironment, StateT, ActionT, ValueT, PolicyT
 
 class Agent(ABC, Generic[StateT, ActionT]):
     def __init__(self, env: AbstractEnvironment[StateT, ActionT]):
@@ -12,8 +12,9 @@ class Agent(ABC, Generic[StateT, ActionT]):
     def state_policy(self, state: StateT) -> dict[ActionT, float]:
         ...
 
+    @property
     @abstractmethod
-    def full_policy(self) -> dict[StateT, dict[ActionT, float]]:
+    def full_policy(self) -> PolicyT:
         ...
 
 class RandomAgent(Agent[StateT, ActionT]):
@@ -24,19 +25,27 @@ class RandomAgent(Agent[StateT, ActionT]):
         p = 1.0 / len(actions)
         return {a: p for a in actions}
 
-    def full_policy(self) -> dict[StateT, dict[ActionT, float]]:
+    @property
+    def full_policy(self) -> PolicyT:
         return {s: self.state_policy(s) for s in self.env.states}
 
-class CustomAgent(Agent[StateT, ActionT]):
+class LearnableAgent(Agent[StateT, ActionT]):
     """
     Acts according to a dynamically assigned policy, which can be updated by calling `update_policy`.
     """
-    def __init__(self, env: AbstractEnvironment[StateT, ActionT], policy: dict[StateT, dict[ActionT, float]]):
+    def __init__(self, env: AbstractEnvironment[StateT, ActionT], policy: PolicyT | None):
         super().__init__(env)
+        if policy is None:
+            random_agent = RandomAgent(env)
+            policy = random_agent.full_policy
         self._policy = policy
 
     def state_policy(self, state: StateT) -> dict[ActionT, float]:
         return self._policy.get(state, {})
 
-    def full_policy(self) -> dict[StateT, dict[ActionT, float]]:
+    @property
+    def full_policy(self) -> PolicyT:
         return {s: self.state_policy(s) for s in self.env.states}
+
+    def assign_policy(self, policy: PolicyT):
+        self._policy = policy

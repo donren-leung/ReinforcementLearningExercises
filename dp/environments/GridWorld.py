@@ -6,9 +6,11 @@ from matplotlib.axes import Axes
 from matplotlib.patches import Rectangle
 import numpy as np
 
-from dp.environments.AbstractEnvironment import AbstractEnvironment
+from dp.environments.AbstractEnvironment import AbstractEnvironment, ValueT
 
 GridLoc: TypeAlias = tuple[int, int]
+GridValue: TypeAlias = dict[GridLoc, float]
+GridPolicy: TypeAlias = dict[GridLoc, dict[str, float]]
 
 class GridWorldEnv(AbstractEnvironment[GridLoc, str]):
     # Define (0, 0) as top-left, with x increasing right and y increasing down
@@ -32,7 +34,7 @@ class GridWorldEnv(AbstractEnvironment[GridLoc, str]):
         states = [(x, y) for x in range(size[0]) for y in range(size[1])]
         super().__init__(states, terminals, rewards, gamma)
 
-    def visualise_value(self, v: dict[GridLoc, float], ax: Axes) -> None:
+    def visualise_value(self, v: GridValue, ax: Axes) -> None:
         width, height = self.size
 
         for col in range(width):
@@ -51,7 +53,7 @@ class GridWorldEnv(AbstractEnvironment[GridLoc, str]):
         ax.set_xticklabels([])
         ax.set_yticklabels([])
 
-    def visualise_greedy_policy(self, v_pi: dict[GridLoc, float], ax: Axes) -> None:
+    def visualise_greedy_policy(self, v_pi: GridValue, ax: Axes, arrow_len: float=0.45) -> None:
         """
         Matplotlib visualization of the greedy policy from value function v_pi.
         - Terminal cells are filled light gray.
@@ -76,38 +78,21 @@ class GridWorldEnv(AbstractEnvironment[GridLoc, str]):
                     continue
 
                 # For each s, find greedy (best) actions: argmax [a] q_pi(s, a)
-                best_actions = []
-                best_value = float("-inf")
-                for a in self.get_actions(s):
-                    # nx = max(0, min(width - 1, s[0] + self.ACTION_MAP[a][0]))
-                    # ny = max(0, min(height - 1, s[1] + self.ACTION_MAP[a][1]))
-                    # s_prime = (nx, ny)
-                    # val = self.expected_reward(s, a) + self.gamma * v[s_prime]
-                    action_value = self.q_pi(s, a, v_pi)
-                    # if s == (1, 0) or s == (0, 0):
-                    #     print(f"Action {a} from {s} leads to {s_prime} with reward {self.expected_reward(s, a)} and value {v[s_prime]}, total {val}")
-                    if action_value > best_value:
-                        best_value = action_value
-                        best_actions = [a]
-                    elif action_value == best_value:
-                        best_actions.append(a)
+                pi_prime = self.do_policy_improvement(v_pi)
+                best_actions = [a for a, prob in pi_prime[s].items() if prob > 0]
 
                 # Best action arrows: superimpose U/D/R/L drawn from cell center (col+0.5, row+0.5)
                 if best_actions:
                     for a in best_actions:
-                        qu.append(self.ACTION_MAP[a][0])
-                        qv.append(self.ACTION_MAP[a][1])
+                        qu.append(self.ACTION_MAP[a][0] * arrow_len)
+                        qv.append(self.ACTION_MAP[a][1] * arrow_len)
                         qx.append(col + 0.5)
                         qy.append(row + 0.5)
 
         if qx:
-            arrow_len = 0.45
-            qu_scaled = [u * arrow_len for u in qu]
-            qv_scaled = [v * arrow_len for v in qv]
-
-            ax.quiver(
+             ax.quiver(
                 qx, qy,
-                qu_scaled, qv_scaled,
+                qu, qv,
                 angles="xy",
                 scale_units="xy",
                 scale=1,
@@ -152,6 +137,13 @@ class EscapeGridWorldEnv(GridWorldEnv):
         Can pick any direction
         """
         return self.ACTION_NAMES if s not in self.terminals else []
+
+    def resultant_states(self, s: GridLoc, a: str) -> list[GridLoc]:
+        assert s not in self.terminals, "Terminal states have no actions and thus no resultant states"
+        new_x, new_y = s[0] + self.ACTION_MAP[a][0], s[1] + self.ACTION_MAP[a][1]
+        new_x, new_y = max(0, new_x), max(0, new_y)
+        new_x, new_y = min(self.size[0] - 1, new_x), min(self.size[1] - 1, new_y)
+        return [(new_x, new_y)]
 
     def do_action(self, s: GridLoc, a: str) -> tuple[GridLoc, float]:
         assert a in self.ACTION_MAP
@@ -200,6 +192,16 @@ class JumpingGridWorldEnv(GridWorldEnv):
         Can pick any direction in any state.
         """
         return self.ACTION_NAMES
+
+    def resultant_states(self, s: GridLoc, a: str) -> list[GridLoc]:
+        assert s not in self.terminals, "Terminal states have no actions and thus no resultant states"
+        if s in self.jumps:
+            return [self.jumps[s][0]]
+
+        new_x, new_y = s[0] + self.ACTION_MAP[a][0], s[1] + self.ACTION_MAP[a][1]
+        new_x, new_y = max(0, new_x), max(0, new_y)
+        new_x, new_y = min(self.size[0] - 1, new_x), min(self.size[1] - 1, new_y)
+        return [(new_x, new_y)]
 
     def do_action(self, s: GridLoc, a: str) -> tuple[GridLoc, float]:
         assert a in self.ACTION_MAP

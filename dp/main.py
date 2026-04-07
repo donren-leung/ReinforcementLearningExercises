@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 
 from dp.environments.GridWorld import GridWorldEnv, EscapeGridWorldEnv, GridLoc, JumpingGridWorldEnv
-from dp.agent import RandomAgent, CustomAgent
+from dp.agent import RandomAgent, LearnableAgent
 
 def record_policy_evaluation(env: GridWorldEnv,
                              V_0: dict[GridLoc, float],
@@ -67,12 +67,12 @@ def visualise_snapshots(snapshots: list[tuple[int, dict[GridLoc, float]]], env: 
 def main(results_folder: Path):
     REWARD = -1.0
     env = EscapeGridWorldEnv((4, 4), [(0, 0), (3, 3)], reward=REWARD)
-    agent = RandomAgent(env)
+    agent = LearnableAgent(env, None)
 
     snapshots = record_policy_evaluation(
         env,
         {s: 0.0 for s in env.states},
-        agent.full_policy(),
+        agent.full_policy,
         visualise_steps=[0, 1, 2, 3, 10],
         threshold=0.0001
     )
@@ -84,12 +84,12 @@ def main(results_folder: Path):
     print(best_V)
     print(iter_policy)
 
-    custom_agent = CustomAgent(env, iter_policy)
+    agent.assign_policy(iter_policy)
 
     snapshots = record_policy_evaluation(
         env,
         best_V,
-        custom_agent.full_policy(),
+        agent.full_policy,
         visualise_steps=[0, 1, 2, 3, 10],
         threshold=0.0001
     )
@@ -104,67 +104,31 @@ def main2(results_folder: Path):
     print(env.jumps)
     print(env.rewards)
 
-    agent = RandomAgent(env)
+    agent = LearnableAgent(env, None)
+    best_V = {s: 0.0 for s in env.states}
+    iter_policy = agent.full_policy
 
-    snapshots = record_policy_evaluation(
-        env,
-        {s: 0.0 for s in env.states},
-        agent.full_policy(),
-        visualise_steps=[0, 1, 2, 3, 10],
-        threshold=0.0001
-    )
-    visualise_snapshots(snapshots, env, results_folder / "jumping_grid_policy_evaluation.png", "Random Policy")
+    for i in range(4):
+        agent.assign_policy(iter_policy)
 
-    best_V = snapshots[-1][1]
-    iter_policy = env.do_policy_improvement(best_V)
+        snapshots = record_policy_evaluation(
+            env,
+            best_V,
+            agent.full_policy,
+            visualise_steps=[0, 1, 2, 3, 10],
+            threshold=0.0001
+        )
 
-    print(best_V)
-    print(iter_policy)
+        if i == 0:
+            visualise_snapshots(snapshots, env, results_folder / "jumping_grid_policy_evaluation.png", "Random Policy")
+        else:
+            visualise_snapshots(snapshots, env, results_folder / f"jumping_grid_policy_iteration{i}.png", f"{i}th Iteration Policy")
 
-    custom_agent = CustomAgent(env, iter_policy)
+        best_V = snapshots[-1][1]
+        iter_policy = env.do_policy_improvement(best_V)
 
-    snapshots = record_policy_evaluation(
-        env,
-        best_V,
-        custom_agent.full_policy(),
-        visualise_steps=[0, 1, 2, 3, 10],
-        threshold=0.0001
-    )
-    visualise_snapshots(snapshots, env, results_folder / "jumping_grid_policy_iteration1.png", "1st Iteration Policy")
-
-    best_V = snapshots[-1][1]
-    iter_policy = env.do_policy_improvement(best_V)
-
-    print(best_V)
-    print(iter_policy)
-
-    custom_agent = CustomAgent(env, iter_policy)
-
-    snapshots = record_policy_evaluation(
-        env,
-        best_V,
-        custom_agent.full_policy(),
-        visualise_steps=[0, 1, 2, 3, 10],
-        threshold=0.0001
-    )
-    visualise_snapshots(snapshots, env, results_folder / "jumping_grid_policy_iteration2.png", "2nd Iteration Policy")
-
-    best_V = snapshots[-1][1]
-    iter_policy = env.do_policy_improvement(best_V)
-
-    print(best_V)
-    print(iter_policy)
-
-    custom_agent = CustomAgent(env, iter_policy)
-
-    snapshots = record_policy_evaluation(
-        env,
-        best_V,
-        custom_agent.full_policy(),
-        visualise_steps=[0, 1, 2, 3, 10],
-        threshold=0.0001
-    )
-    visualise_snapshots(snapshots, env, results_folder / "jumping_grid_policy_iteration3.png", "3rd Iteration Policy")
+        print(best_V)
+        print(iter_policy)
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
@@ -176,4 +140,4 @@ if __name__ == "__main__":
     elif sys.argv[1] == "escape":
         main(Path(sys.argv[2]))
     else:
-        raise ValueError(f"Unknown environment {sys.argv[1]}. Expected 'escape' or 'jump'.")
+        raise ValueError(f"Unknown environment {sys.argv[1]}. Expected 'escape' or 'jumping'.")

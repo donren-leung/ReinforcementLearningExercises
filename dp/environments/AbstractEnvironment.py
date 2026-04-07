@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Any, Generic, Hashable, TypeVar, Sequence, final
+from copy import deepcopy
+from typing import Any, Generic, Hashable, TypeVar, TypeAlias, Sequence, final
 
 from matplotlib.axes import Axes
 
@@ -17,11 +18,20 @@ get_actions(s) -> A(s)
 do_action(a) -> s', r
 """
 
-StateT = TypeVar("StateT", bound=Hashable)
-ActionT  = TypeVar("ActionT", bound=Hashable)
+StateT  = TypeVar("StateT", bound=Hashable)
+ActionT = TypeVar("ActionT", bound=Hashable)
+
+ValueT  = dict[StateT, float]
+PolicyT = dict[StateT, dict[ActionT, float]]
 
 class AbstractEnvironment(ABC, Generic[StateT, ActionT]):
-    def __init__(self, states: Sequence[StateT], terminals: Sequence[StateT], rewards: Sequence[float], gamma: float):
+    def __init__(
+            self,
+            states: Sequence[StateT],
+            terminals: Sequence[StateT],
+            rewards: Sequence[float],
+            gamma: float
+    ) -> None:
         assert 0 <= gamma <= 1
         self._states = list(states)
         self._terminals = set(terminals)
@@ -42,6 +52,26 @@ class AbstractEnvironment(ABC, Generic[StateT, ActionT]):
 
     def is_terminal(self, s: StateT) -> bool:
         return s in self._terminals
+
+    @abstractmethod
+    def get_actions(self, s: StateT) -> list[ActionT]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def resultant_states(self, s: StateT, a: ActionT) -> list[StateT]:
+        """
+        Return the list of possible resultant states from taking action a in state s.
+        Note: this is the same as the set of s' such that p(s', r|s, a) > 0 for some r.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def do_action(self, s: StateT, a: ActionT) -> tuple[StateT, float]:
+        """
+        Given S_t = s and A_t = a, return (R_{t+1} and S_{t+1})
+        by sampling from the dynamics function p(r, s'|s, a).
+        """
+        raise NotImplementedError
 
     @abstractmethod
     def dynamics(self, s_prime: StateT, r: float, s: StateT, a: ActionT) -> float:
@@ -67,43 +97,43 @@ class AbstractEnvironment(ABC, Generic[StateT, ActionT]):
         """
         return sum(
             sum(self.dynamics(s_prime, r, s, a) * r for r in self._rewards)
-            for s_prime in self._states
+            for s_prime in self.resultant_states(s, a)
         )
 
     @final
-    def q_pi(self, s: StateT, a: ActionT, v_pi: dict[StateT, float]):
+    def q_pi(self, s: StateT, a: ActionT, v_pi: ValueT) -> float:
         return sum(
             self.dynamics(s_prime, r, s, a) * (r + self.gamma * v_pi[s_prime])
-                # TODO: can optimise by iterating through the possible rewards of (s, a, s') tuples
                 for r in self.rewards
-                for s_prime in self.states
+                for s_prime in self.resultant_states(s, a)
         )
 
     @final
-    def do_policy_eval(self,
-                       policy: dict[StateT, dict[ActionT, float]],
-                       v_0: dict[StateT, float],
-                       threshold: float) -> dict[StateT, float]:
+    def do_policy_eval(self, policy: PolicyT, v_0: ValueT, threshold: float) -> tuple[ValueT, int]:
         """
         Iterative Policy Evaluation, for estimating V ~= v_pi
 
         Inputs
         pi: the policy to be evaluated
         threshold: determining accuracy of estimation
+
+        Returns
+        v_pi: the estimated value function for pi, such that max_s |v_pi[s] - true_v_pi[s]| < threshold
+        k: the number of iterations taken to converge to this estimate
         """
         v_curr = v_0
+        k = 0
         delta = float("inf")
         while delta > threshold:
             v_new = self.do_policy_eval_iter(policy, v_curr)
             delta = max(abs(new_value - v_curr[s]) for s, new_value in v_new.items())
             v_curr = v_new
+            k += 1
 
-        return v_curr
+        return v_curr, k
 
     @final
-    def do_policy_eval_iter(self,
-                            policy: dict[StateT, dict[ActionT, float]],
-                            v_0: dict[StateT, float]) -> dict[StateT, float]:
+    def do_policy_eval_iter(self, policy: PolicyT, v_0: ValueT) -> ValueT:
         """
         Initialise V(s) for all s in S+ arbitrarily except that V(terminal) = 0
         Loop:
@@ -121,18 +151,13 @@ class AbstractEnvironment(ABC, Generic[StateT, ActionT]):
         v_new: dict[StateT, float] = dict()
         for s in self.states:
             v_new[s] = sum(
-                policy[s][a] * sum(
-                    self.dynamics(s_prime, r, s, a) * (r + self.gamma * v_0[s_prime])
-                        # TODO:can optimise by iterating through the possible rewards of (s, a, s') tuples
-                        for r in self.rewards
-                        for s_prime in self.states
-                )
+                policy[s][a] * self.q_pi(s, a, v_0)
                 for a in self.get_actions(s)
             )
         return v_new
 
     @final
-    def do_policy_improvement(self, v_pi: dict[StateT, float]) -> dict[StateT, dict[ActionT, float]]:
+    def do_policy_improvement(self, v_pi: ValueT) -> PolicyT:
         """
         Return a new policy, which is to take greedy actions based on the supplied v.
 
@@ -143,15 +168,7 @@ class AbstractEnvironment(ABC, Generic[StateT, ActionT]):
         pi_new: dict[StateT, dict[ActionT, float]] = {}
         for s in self.states:
             # q_pi(s, a) = Σ(s', r) p(s', r|s, a) (r + gamma * v_pi[s'])
-            q_pi = {a:
-                sum(
-                    self.dynamics(s_prime, r, s, a) * (r + self.gamma * v_pi[s_prime])
-                        # TODO: can optimise by iterating through the possible rewards of (s, a, s') tuples
-                        for r in self.rewards
-                        for s_prime in self.states
-                )
-                for a in self.get_actions(s)
-            }
+            q_pi = {a: self.q_pi(s, a, v_pi) for a in self.get_actions(s)}
 
             # Find the max q_pi(s, a) and the number of actions that achieve this to divide prob equally
             max_q = max(q_pi.values()) if len(q_pi) > 0 else float("-inf")
@@ -161,22 +178,67 @@ class AbstractEnvironment(ABC, Generic[StateT, ActionT]):
 
         return pi_new
 
-    # @abstractmethod
-    def visualise_value(self, v: dict[StateT, float], ax: Axes) -> None:
-        raise NotImplementedError
+    @final
+    def do_policy_iteration(
+            self,
+            policy_0: PolicyT,
+            v_0: ValueT,
+            threshold: float=0.01,
+            save_intermediates: bool=False
+    ) -> tuple[ValueT, PolicyT, list[tuple[ValueT, ValueT, int, PolicyT]]]:
+        """
+        1. Initialise V(s) in Real and pi(s) in A(s) arbitrarily for all s in S (given as params).
 
-    # @abstractmethod
-    def visualise_greedy_policy(self, v_pi: dict[StateT, float], ax: Axes) -> None:
+        Loop until policy is stable:
+        2. Policy Evaluation
+        3. Policy Improvement
+        End loop
+
+        4. Evaluate v* from pi*
+
+        save_intermediates flag: If true, at each loop end, at policy iteration p_i,
+        save (v0_p_i, vk_p_i, k, pi'), where pi' is the greedy policy given vk_p_i.
+
+        Return v*, pi*
+        """
+        history: list[tuple[ValueT, ValueT, int, PolicyT]] = []
+
+        def cmp_policy(policy_a: PolicyT, policy_b: PolicyT) -> bool:
+            """
+            To terminate policy iteration, check if the policy, greedy on v_pi,
+            is the same as old policy. More exact, this is when the set of optimal,
+            (non-zero probability) actions for all states is the same.
+            """
+            if set(policy_a.keys()) != set(policy_b.keys()):
+                raise ValueError(f"Policies have different state keys {set(policy_a.keys())} vs {set(policy_b.keys())}")
+
+            for s in policy_a.keys():
+                a_pos = {a for a, p in policy_a[s].items() if p > 0}
+                b_pos = {a for a, p in policy_b[s].items() if p > 0}
+                if a_pos != b_pos:
+                    return False
+            return True
+
+        policy_i = policy_0
+        v_i = v_0
+        while True:
+            v_i_eval, k = self.do_policy_eval(policy_i, v_i, threshold)
+            policy_i_prime = self.do_policy_improvement(v_i_eval)
+
+            if save_intermediates:
+                history.append((deepcopy(v_i), deepcopy(v_i_eval), k, deepcopy(policy_i_prime)))
+            if cmp_policy(policy_i, policy_i_prime):
+                break
+
+            v_i = v_i_eval
+            policy_i = policy_i_prime
+
+        return v_i_eval, policy_i, history
+
+    @abstractmethod
+    def visualise_value(self, v: ValueT, ax: Axes) -> None:
         raise NotImplementedError
 
     @abstractmethod
-    def get_actions(self, s: StateT) -> list[ActionT]:
-        raise NotImplementedError
-
-    @abstractmethod
-    def do_action(self, s: StateT, a: ActionT) -> tuple[StateT, float]:
-        """
-        Given S_t = s and A_t = a, return (R_{t+1} and S_{t+1})
-        by sampling from the dynamics function p(r, s'|s, a).
-        """
+    def visualise_greedy_policy(self, v_pi: ValueT, ax: Axes) -> None:
         raise NotImplementedError
