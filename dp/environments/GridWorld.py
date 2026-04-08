@@ -1,18 +1,18 @@
 from abc import ABC
-from typing import TypeAlias
+from typing import Mapping, TypeAlias
 
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.patches import Rectangle
 import numpy as np
 
-from dp.environments.AbstractEnvironment import AbstractEnvironment, ValueT
+from dp.environments.AbstractEnvironment import AbstractEnvironment
 
-GridLoc: TypeAlias = tuple[int, int]
-GridValue: TypeAlias = dict[GridLoc, float]
-GridPolicy: TypeAlias = dict[GridLoc, dict[str, float]]
+GridState: TypeAlias = tuple[int, int]
+GridValue: TypeAlias = Mapping[GridState, float]
+GridPolicy: TypeAlias = Mapping[GridState, Mapping[str, float]]
 
-class GridWorldEnv(AbstractEnvironment[GridLoc, str]):
+class GridWorldEnv(AbstractEnvironment[GridState, str]):
     # Define (0, 0) as top-left, with x increasing right and y increasing down
     ACTION_MAP = {
         "up":    ( 0,  -1),
@@ -26,16 +26,20 @@ class GridWorldEnv(AbstractEnvironment[GridLoc, str]):
     def __init__(
             self,
             size: tuple[int, int],
-            terminals: list[GridLoc],
+            terminals: list[GridState],
             rewards: list[float],
             gamma: float
     ):
-        self.size = size
+        self._size = size
         states = [(x, y) for x in range(size[0]) for y in range(size[1])]
         super().__init__(states, terminals, rewards, gamma)
 
+    @property
+    def size(self) -> tuple[int, int]:
+        return self._size
+
     def visualise_value(self, v: GridValue, ax: Axes) -> None:
-        width, height = self.size
+        width, height = self._size
 
         for col in range(width):
             for row in range(height):
@@ -130,17 +134,16 @@ class GridWorldEnv(AbstractEnvironment[GridLoc, str]):
         ax.set_yticklabels([])
 
 class EscapeGridWorldEnv(GridWorldEnv):
-    def __init__(self, size: tuple[int, int], terminals: list[GridLoc], gamma: float=1.0, reward: float=-1.0):
+    def __init__(self, size: tuple[int, int], terminals: list[GridState], gamma: float=1.0, reward: float=-1.0):
         assert len(terminals) == len(set(terminals))
         for terminal_x, terminal_y in terminals:
             assert 0 <= terminal_x < size[0]
             assert 0 <= terminal_y < size[1]
 
-        self.size = size
         self.reward = reward
         super().__init__(size, terminals, [reward], gamma)
 
-    def dynamics(self, s_prime: GridLoc, r: float, s: GridLoc, a: str) -> float:
+    def dynamics(self, s_prime: GridState, r: float, s: GridState, a: str) -> float:
         """
         This problem is deterministic
         """
@@ -149,20 +152,20 @@ class EscapeGridWorldEnv(GridWorldEnv):
         else:
             return 0.0
 
-    def get_actions(self, s: GridLoc) -> list[str]:
+    def get_actions(self, s: GridState) -> list[str]:
         """
         Can pick any direction
         """
         return self.ACTION_NAMES if s not in self.terminals else []
 
-    def resultant_states(self, s: GridLoc, a: str) -> list[GridLoc]:
+    def resultant_states(self, s: GridState, a: str) -> list[GridState]:
         assert s not in self.terminals, "Terminal states have no actions and thus no resultant states"
         new_x, new_y = s[0] + self.ACTION_MAP[a][0], s[1] + self.ACTION_MAP[a][1]
         new_x, new_y = max(0, new_x), max(0, new_y)
         new_x, new_y = min(self.size[0] - 1, new_x), min(self.size[1] - 1, new_y)
         return [(new_x, new_y)]
 
-    def do_action(self, s: GridLoc, a: str) -> tuple[GridLoc, float]:
+    def do_action(self, s: GridState, a: str) -> tuple[GridState, float]:
         assert a in self.ACTION_MAP
         new_x, new_y = s[0] + self.ACTION_MAP[a][0], s[1] + self.ACTION_MAP[a][1]
 
@@ -176,7 +179,7 @@ class JumpingGridWorldEnv(GridWorldEnv):
     def __init__(
             self,
             size: tuple[int, int],
-            jumps: list[tuple[GridLoc, GridLoc, float]],
+            jumps: list[tuple[GridState, GridState, float]],
             gamma: float=0.9,
             reward: float=0.0,
             oob_reward: float=-1.0
@@ -189,13 +192,12 @@ class JumpingGridWorldEnv(GridWorldEnv):
             assert 0 <= src_y < size[1]
             assert 0 <= dest_y < size[1]
 
-        self.size = size
         self.reward = reward
         self.oob_reward = oob_reward
         self.jumps = {src: (dest, jump_reward) for src, dest, jump_reward in jumps}
         super().__init__(size, [], [reward, oob_reward] + list(set(r for _, _, r in jumps)), gamma)
 
-    def dynamics(self, s_prime: GridLoc, r: float, s: GridLoc, a: str) -> float:
+    def dynamics(self, s_prime: GridState, r: float, s: GridState, a: str) -> float:
         """
         This problem is deterministic
         """
@@ -204,13 +206,13 @@ class JumpingGridWorldEnv(GridWorldEnv):
         else:
             return 0.0
 
-    def get_actions(self, s: GridLoc) -> list[str]:
+    def get_actions(self, s: GridState) -> list[str]:
         """
         Can pick any direction in any state.
         """
         return self.ACTION_NAMES
 
-    def resultant_states(self, s: GridLoc, a: str) -> list[GridLoc]:
+    def resultant_states(self, s: GridState, a: str) -> list[GridState]:
         assert s not in self.terminals, "Terminal states have no actions and thus no resultant states"
         if s in self.jumps:
             return [self.jumps[s][0]]
@@ -220,7 +222,7 @@ class JumpingGridWorldEnv(GridWorldEnv):
         new_x, new_y = min(self.size[0] - 1, new_x), min(self.size[1] - 1, new_y)
         return [(new_x, new_y)]
 
-    def do_action(self, s: GridLoc, a: str) -> tuple[GridLoc, float]:
+    def do_action(self, s: GridState, a: str) -> tuple[GridState, float]:
         assert a in self.ACTION_MAP
         if s in self.jumps:
             return self.jumps[s]
@@ -238,7 +240,7 @@ def main():
     REWARD = -1.0
     env = EscapeGridWorldEnv((4, 4), [(0, 0), (3, 3)], reward=REWARD)
 
-    def test_dynamics(env: GridWorldEnv, expected_s_prime: GridLoc, r: float, s: GridLoc, a: str, *, expected_prob: float = 1.0):
+    def test_dynamics(env: GridWorldEnv, expected_s_prime: GridState, r: float, s: GridState, a: str, *, expected_prob: float = 1.0):
         s_prime, r = env.do_action(s, a)
         if expected_prob == 1.0:
             assert s_prime == expected_s_prime, f"Expected to end up in {expected_s_prime} from {s} by taking action {a}, but ended up in {s_prime}"

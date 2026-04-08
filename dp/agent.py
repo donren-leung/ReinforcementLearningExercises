@@ -1,8 +1,15 @@
 from abc import abstractmethod, ABC
 from copy import deepcopy
-from typing import Generic
+from typing import Generic, Hashable, Mapping, TypeAlias, TypeVar
 
-from dp.environments.AbstractEnvironment import AbstractEnvironment, StateT, ActionT, ValueT, PolicyT
+from dp.environments.AbstractEnvironment import AbstractEnvironment
+from dp.environments.protocols import ValueLike, PolicyLike
+
+StateT = TypeVar("StateT", bound=Hashable)
+ActionT = TypeVar("ActionT", bound=Hashable)
+
+ValueT = ValueLike[StateT]
+PolicyT = PolicyLike[StateT, ActionT]
 
 class Agent(ABC, Generic[StateT, ActionT]):
     def __init__(self, env: AbstractEnvironment[StateT, ActionT]):
@@ -10,7 +17,7 @@ class Agent(ABC, Generic[StateT, ActionT]):
         self.V = {s: 0.0 for s in env.states}
 
     @abstractmethod
-    def state_policy(self, state: StateT) -> dict[ActionT, float]:
+    def state_policy(self, state: StateT) -> Mapping[ActionT, float]:
         ...
 
     @property
@@ -19,7 +26,7 @@ class Agent(ABC, Generic[StateT, ActionT]):
         ...
 
 class RandomAgent(Agent[StateT, ActionT]):
-    def state_policy(self, state: StateT) -> dict[ActionT, float]:
+    def state_policy(self, state: StateT) -> Mapping[ActionT, float]:
         actions = self.env.get_actions(state)
         if not actions:
             return {}
@@ -41,7 +48,7 @@ class LearnableAgent(Agent[StateT, ActionT]):
             policy = random_agent.full_policy
         self._policy = deepcopy(policy)
 
-    def state_policy(self, state: StateT) -> dict[ActionT, float]:
+    def state_policy(self, state: StateT) -> Mapping[ActionT, float]:
         return self._policy.get(state, {})
 
     @property

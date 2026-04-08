@@ -1,4 +1,5 @@
-Problems to apply policy evaluation (prediction) and policy iteration/value iteration (control)
+# Problems to apply policy evaluation (prediction) and policy iteration/value iteration (control)
+
 1. Gridworld, Example 3.5/Figure 3.2. Solution Figure 3.5
 
 GridWorld Figure 3.2 (left) shows a rectangular gridworld representation

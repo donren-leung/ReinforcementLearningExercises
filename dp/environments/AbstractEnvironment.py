@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 from copy import deepcopy
 from typing import Any, Generic, Hashable, TypeVar, TypeAlias, Sequence, final
 
+from dp.environments.protocols import DpVisualisableEnv, ValueLike, PolicyLike
+
 from matplotlib.axes import Axes
 
 """
@@ -18,13 +20,13 @@ get_actions(s) -> A(s)
 do_action(a) -> s', r
 """
 
-StateT  = TypeVar("StateT", bound=Hashable)
+StateT = TypeVar("StateT", bound=Hashable)
 ActionT = TypeVar("ActionT", bound=Hashable)
 
-ValueT  = dict[StateT, float]
-PolicyT = dict[StateT, dict[ActionT, float]]
+ValueT = ValueLike[StateT]
+PolicyT = PolicyLike[StateT, ActionT]
 
-class AbstractEnvironment(ABC, Generic[StateT, ActionT]):
+class AbstractEnvironment(ABC, Generic[StateT, ActionT], DpVisualisableEnv[StateT, ActionT]):
     def __init__(
             self,
             states: Sequence[StateT],
@@ -180,6 +182,22 @@ class AbstractEnvironment(ABC, Generic[StateT, ActionT]):
         return pi_new
 
     @final
+    @classmethod
+    def cmp_policy(cls, policy_a: PolicyT, policy_b: PolicyT) -> bool:
+        """
+        Check whether two policies have the same optimal-action support per state.
+        """
+        if set(policy_a.keys()) != set(policy_b.keys()):
+            raise ValueError(f"Policies have different state keys {set(policy_a.keys())} vs {set(policy_b.keys())}")
+
+        for s in policy_a.keys():
+            a_pos = {a for a, p in policy_a[s].items() if p > 0}
+            b_pos = {a for a, p in policy_b[s].items() if p > 0}
+            if a_pos != b_pos:
+                return False
+        return True
+
+    @final
     def do_policy_iteration(
             self,
             policy_0: PolicyT,
@@ -205,22 +223,6 @@ class AbstractEnvironment(ABC, Generic[StateT, ActionT]):
         """
         history: list[tuple[ValueT, int, PolicyT]] = []
 
-        def cmp_policy(policy_a: PolicyT, policy_b: PolicyT) -> bool:
-            """
-            To terminate policy iteration, check if the policy, greedy on v_pi,
-            is the same as old policy. More exact, this is when the set of optimal,
-            (non-zero probability) actions for all states is the same.
-            """
-            if set(policy_a.keys()) != set(policy_b.keys()):
-                raise ValueError(f"Policies have different state keys {set(policy_a.keys())} vs {set(policy_b.keys())}")
-
-            for s in policy_a.keys():
-                a_pos = {a for a, p in policy_a[s].items() if p > 0}
-                b_pos = {a for a, p in policy_b[s].items() if p > 0}
-                if a_pos != b_pos:
-                    return False
-            return True
-
         policy_i = policy_0
         v_i = V_0
         while True:
@@ -230,7 +232,7 @@ class AbstractEnvironment(ABC, Generic[StateT, ActionT]):
             if save_intermediates:
                 history.append((deepcopy(v_i_eval), k, deepcopy(policy_i)))
             
-            if cmp_policy(policy_i, policy_i_prime):
+            if self.cmp_policy(policy_i, policy_i_prime):
                 # Policy is stable under greedy improvement, so v_i_eval is already optimal.
                 # No extra history entry is needed.
                 return v_i_eval, policy_i_prime, history
@@ -243,5 +245,5 @@ class AbstractEnvironment(ABC, Generic[StateT, ActionT]):
         raise NotImplementedError
 
     @abstractmethod
-    def visualise_greedy_policy(self, v_pi: ValueT | None, pi: PolicyT | None, ax: Axes, arrow_len: float=0.45) -> None:
+    def visualise_greedy_policy(self, v_pi: ValueT | None, pi: PolicyT | None, ax: Axes) -> None:
         raise NotImplementedError
