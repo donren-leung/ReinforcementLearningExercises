@@ -1,4 +1,5 @@
 from abc import abstractmethod, ABC
+from copy import deepcopy
 from typing import Generic
 
 from dp.environments.AbstractEnvironment import AbstractEnvironment, StateT, ActionT, ValueT, PolicyT
@@ -38,7 +39,7 @@ class LearnableAgent(Agent[StateT, ActionT]):
         if policy is None:
             random_agent = RandomAgent(env)
             policy = random_agent.full_policy
-        self._policy = policy
+        self._policy = deepcopy(policy)
 
     def state_policy(self, state: StateT) -> dict[ActionT, float]:
         return self._policy.get(state, {})
@@ -48,4 +49,4 @@ class LearnableAgent(Agent[StateT, ActionT]):
         return {s: self.state_policy(s) for s in self.env.states}
 
     def assign_policy(self, policy: PolicyT):
-        self._policy = policy
+        self._policy = deepcopy(policy)

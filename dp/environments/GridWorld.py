@@ -53,13 +53,24 @@ class GridWorldEnv(AbstractEnvironment[GridLoc, str]):
         ax.set_xticklabels([])
         ax.set_yticklabels([])
 
-    def visualise_greedy_policy(self, v_pi: GridValue, ax: Axes, arrow_len: float=0.45) -> None:
+    def visualise_greedy_policy(
+            self,
+            v_pi: GridValue | None,
+            pi: GridPolicy | None,
+            ax: Axes,
+            arrow_len: float=0.45
+    ) -> None:
         """
-        Matplotlib visualization of the greedy policy from value function v_pi.
-        - Terminal cells are filled light gray.
-        - Tied actions are combined by summing unit direction vectors; if they cancel (opposite),
-        each action is drawn separately.
-        - Call with `show_values=True` to display numeric v_pi in each cell.
+        Matplotlib visualization of a policy or the greedy policy derived from a value function.
+
+        Accepts either:
+        - a value map `v_or_pi` (state -> float), in which case the greedy policy is computed once
+          and visualised; or
+        - a policy map `v_or_pi` (state -> {action: prob}), in which case the provided policy
+          is visualised directly.
+
+        Terminal cells are filled light gray. Tied actions are drawn by superimposing arrows
+        for each optimal action.
         """
         width, height = self.size
 
@@ -69,6 +80,16 @@ class GridWorldEnv(AbstractEnvironment[GridLoc, str]):
                 face = "lightgray" if (col, row) in self.terminals else "white"
                 ax.add_patch(Rectangle((col, row), 1, 1, facecolor=face, edgecolor="k"))
 
+        # Determine whether we're given a policy or a value function.
+        # If given a policy (values are dicts mapping actions->prob), use it directly.
+        # Otherwise treat as a value function and compute the greedy policy once.
+        if pi is not None:
+            pass
+        elif v_pi is not None:
+            pi = self.do_policy_improvement(v_pi)
+        else:
+            raise ValueError("Must provide either a value function or a policy to visualise")
+
         # prepare arrow vectors (use quiver for combined arrows)
         qx, qy, qu, qv = [], [], [], []
         for col in range(width):
@@ -77,17 +98,13 @@ class GridWorldEnv(AbstractEnvironment[GridLoc, str]):
                 if s in self.terminals:
                     continue
 
-                # For each s, find greedy (best) actions: argmax [a] q_pi(s, a)
-                pi_prime = self.do_policy_improvement(v_pi)
-                best_actions = [a for a, prob in pi_prime[s].items() if prob > 0]
-
                 # Best action arrows: superimpose U/D/R/L drawn from cell center (col+0.5, row+0.5)
-                if best_actions:
-                    for a in best_actions:
-                        qu.append(self.ACTION_MAP[a][0] * arrow_len)
-                        qv.append(self.ACTION_MAP[a][1] * arrow_len)
-                        qx.append(col + 0.5)
-                        qy.append(row + 0.5)
+                best_actions = [a for a, prob in pi.get(s, {}).items() if prob > 0]
+                for a in best_actions:
+                    qu.append(self.ACTION_MAP[a][0] * arrow_len)
+                    qv.append(self.ACTION_MAP[a][1] * arrow_len)
+                    qx.append(col + 0.5)
+                    qy.append(row + 0.5)
 
         if qx:
              ax.quiver(

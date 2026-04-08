@@ -130,7 +130,8 @@ class AbstractEnvironment(ABC, Generic[StateT, ActionT]):
             v_curr = v_new
             k += 1
 
-        return v_curr, k
+        # it takes k iterations to converge but k+1 iterations to realise that.
+        return v_curr, k - 1
 
     @final
     def do_policy_eval_iter(self, policy: PolicyT, v_0: ValueT) -> ValueT:
@@ -182,10 +183,10 @@ class AbstractEnvironment(ABC, Generic[StateT, ActionT]):
     def do_policy_iteration(
             self,
             policy_0: PolicyT,
-            v_0: ValueT,
-            threshold: float=0.01,
+            V_0: ValueT,
+            threshold: float,
             save_intermediates: bool=False
-    ) -> tuple[ValueT, PolicyT, list[tuple[ValueT, ValueT, int, PolicyT]]]:
+    ) -> tuple[ValueT, PolicyT, list[tuple[ValueT, int, PolicyT]]]:
         """
         1. Initialise V(s) in Real and pi(s) in A(s) arbitrarily for all s in S (given as params).
 
@@ -196,12 +197,13 @@ class AbstractEnvironment(ABC, Generic[StateT, ActionT]):
 
         4. Evaluate v* from pi*
 
-        save_intermediates flag: If true, at each loop end, at policy iteration p_i,
-        save (v0_p_i, vk_p_i, k, pi'), where pi' is the greedy policy given vk_p_i.
+        save_intermediates flag: If true, at each policy iteration pi_i loop's end,
+        record (vk_pi_i, k, pi). pi'. The greedy policy given vk_p_i, and its corresponding
+        value function will be saved in the next iteration.
 
-        Return v*, pi*
+        Return v*, pi*, history
         """
-        history: list[tuple[ValueT, ValueT, int, PolicyT]] = []
+        history: list[tuple[ValueT, int, PolicyT]] = []
 
         def cmp_policy(policy_a: PolicyT, policy_b: PolicyT) -> bool:
             """
@@ -220,25 +222,26 @@ class AbstractEnvironment(ABC, Generic[StateT, ActionT]):
             return True
 
         policy_i = policy_0
-        v_i = v_0
+        v_i = V_0
         while True:
             v_i_eval, k = self.do_policy_eval(policy_i, v_i, threshold)
             policy_i_prime = self.do_policy_improvement(v_i_eval)
 
             if save_intermediates:
-                history.append((deepcopy(v_i), deepcopy(v_i_eval), k, deepcopy(policy_i_prime)))
+                history.append((deepcopy(v_i_eval), k, deepcopy(policy_i)))
+            
             if cmp_policy(policy_i, policy_i_prime):
-                break
+                # Policy is stable under greedy improvement, so v_i_eval is already optimal.
+                # No extra history entry is needed.
+                return v_i_eval, policy_i_prime, history
 
             v_i = v_i_eval
             policy_i = policy_i_prime
-
-        return v_i_eval, policy_i, history
 
     @abstractmethod
     def visualise_value(self, v: ValueT, ax: Axes) -> None:
         raise NotImplementedError
 
     @abstractmethod
-    def visualise_greedy_policy(self, v_pi: ValueT, ax: Axes) -> None:
+    def visualise_greedy_policy(self, v_pi: ValueT | None, pi: PolicyT | None, ax: Axes, arrow_len: float=0.45) -> None:
         raise NotImplementedError
