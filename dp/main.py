@@ -5,7 +5,7 @@ import argparse
 import matplotlib.pyplot as plt
 from dp.environments.AbstractEnvironment import AbstractEnvironment, StateT, ActionT
 from dp.environments.factory import make_env
-from dp.agent import LearnableAgent
+from dp.agent import ConstantAgent, LearnableAgent
 from dp.environments.protocols import DpVisualisableEnv, PolicyLike, ValueLike
 from dp.visualise import (
     DEFAULT_POLICY_EVAL_THRESHOLD,
@@ -21,14 +21,21 @@ def eval_main(results_folder: Path, env_name: str):
     best_V = {s: 0.0 for s in env.states}
     iter_policy = LearnableAgent(env, None).full_policy
 
+    if env_name == "jacks":
+        threshold = 0.1
+        visualise_steps = [0, 1]
+    else:
+        threshold = DEFAULT_POLICY_EVAL_THRESHOLD
+        visualise_steps = DEFAULT_VISUALISE_STEPS
+
     iteration = 0
     while True:
         snapshots = record_policy_evaluation(
             env,
             best_V,
             iter_policy,
-            visualise_steps=DEFAULT_VISUALISE_STEPS,
-            threshold=DEFAULT_POLICY_EVAL_THRESHOLD,
+            visualise_steps=visualise_steps,
+            threshold=threshold,
         )
 
         output_name = f"policy_evaluation{iteration}.png"
@@ -56,9 +63,18 @@ def policy_iter_main(results_folder: Path, env_name: str):
     env = make_env(env_name)
 
     V_0 = {s: 0.0 for s in env.states}
-    policy_0 = LearnableAgent(env, None).full_policy
 
-    v_star, policy_star, history = env.do_policy_iteration(policy_0, V_0, threshold=DEFAULT_POLICY_EVAL_THRESHOLD, save_intermediates=True)
+    if env_name in ["jacks", "jacks-small"]:
+        threshold = 0.1
+        policy_0 = ConstantAgent(env, 0).full_policy
+    else:
+        threshold = DEFAULT_POLICY_EVAL_THRESHOLD
+        policy_0 = LearnableAgent(env, None).full_policy
+
+    v_star, policy_star, history = env.do_policy_iteration(policy_0, V_0,
+                                                           threshold=threshold,
+                                                           save_intermediates=True,
+                                                           log=True)
 
     # Visualise the recorded intermediates from policy iteration
     plt.rcParams["mathtext.fontset"] = "cm"   # 'cm' ≈ Computer Modern

@@ -67,6 +67,14 @@ class AbstractEnvironment(ABC, Generic[StateT, ActionT], DpVisualisableEnv[State
         """
         raise NotImplementedError
 
+    # @abstractmethod
+    # def resultant_rewards(self, s: StateT, a: ActionT, s_prime: StateT) -> list[float]:
+    #     """
+    #     Return the list of possible resultant rewards from taking action a in state s.
+    #     Note: this is the same as the set of r such that p(s', r|s, a) > 0 for some s'.
+    #     """
+    #     raise NotImplementedError
+
     @abstractmethod
     def do_action(self, s: StateT, a: ActionT) -> tuple[StateT, float]:
         """
@@ -75,43 +83,45 @@ class AbstractEnvironment(ABC, Generic[StateT, ActionT], DpVisualisableEnv[State
         """
         raise NotImplementedError
 
-    @abstractmethod
-    def dynamics(self, s_prime: StateT, r: float, s: StateT, a: ActionT) -> float:
-        """
-        p(s', r|s, a): S x R x S x A -> [0, 1]
-        Note: Σ[s', r] p(s', r|s, a) = 1 for all s, a.
-        """
-        raise NotImplementedError
+    # @abstractmethod
+    # def dynamics(self, s_prime: StateT, r: float, s: StateT, a: ActionT) -> float:
+    #     """
+    #     p(s', r|s, a): S x R x S x A -> [0, 1]
+    #     Note: Σ[s', r] p(s', r|s, a) = 1 for all s, a.
+    #     """
+    #     raise NotImplementedError
 
-    @final
+    # @final
+    @abstractmethod
     def transition_probs(self, s_prime: StateT, s: StateT, a: ActionT) -> float:
         """
         p(s'|s, a): S x S x A -> [0, 1]
         Note: this is the same as Σ[r] p(s', r|s, a)
         """
-        return sum(self.dynamics(s_prime, r, s, a) for r in self._rewards)
+        raise NotImplementedError
+        # return sum(self.dynamics(s_prime, r, s, a) for r in self._rewards)
 
-    @final
+    @abstractmethod
     def expected_reward(self, s: StateT, a: ActionT) -> float:
         """
         r(s, a): S x A -> Real
         Note: this is the same as Σ[s', r] r * p(s', r|s, a)
         """
-        return sum(
-            sum(self.dynamics(s_prime, r, s, a) * r for r in self._rewards)
+        raise NotImplementedError
+        # return sum(
+        #     sum(self.dynamics(s_prime, r, s, a) * r for r in self._rewards)
+        #     for s_prime in self.resultant_states(s, a)
+        # )
+
+    @final
+    def q_pi(self, s: StateT, a: ActionT, v_pi: ValueT) -> float:
+        return self.expected_reward(s, a) + self.gamma * sum(
+            self.transition_probs(s_prime, s, a) * v_pi[s_prime]
             for s_prime in self.resultant_states(s, a)
         )
 
     @final
-    def q_pi(self, s: StateT, a: ActionT, v_pi: ValueT) -> float:
-        return sum(
-            self.dynamics(s_prime, r, s, a) * (r + self.gamma * v_pi[s_prime])
-                for r in self.rewards
-                for s_prime in self.resultant_states(s, a)
-        )
-
-    @final
-    def do_policy_eval(self, policy: PolicyT, v_0: ValueT, threshold: float) -> tuple[ValueT, int]:
+    def do_policy_eval(self, policy: PolicyT, v_0: ValueT, threshold: float, max_iter: int=999) -> tuple[ValueT, int]:
         """
         Iterative Policy Evaluation, for estimating V ~= v_pi
 
@@ -203,7 +213,8 @@ class AbstractEnvironment(ABC, Generic[StateT, ActionT], DpVisualisableEnv[State
             policy_0: PolicyT,
             V_0: ValueT,
             threshold: float,
-            save_intermediates: bool=False
+            save_intermediates: bool=False,
+            log: bool=False
     ) -> tuple[ValueT, PolicyT, list[tuple[ValueT, int, PolicyT]]]:
         """
         1. Initialise V(s) in Real and pi(s) in A(s) arbitrarily for all s in S (given as params).
@@ -226,6 +237,10 @@ class AbstractEnvironment(ABC, Generic[StateT, ActionT], DpVisualisableEnv[State
         policy_i = policy_0
         v_i = V_0
         while True:
+            if log:
+                print(f"Policy iteration {len(history)}")
+                print(f"Current policy: {policy_i}")
+                print(f"Current value function: {v_i}")
             v_i_eval, k = self.do_policy_eval(policy_i, v_i, threshold)
             policy_i_prime = self.do_policy_improvement(v_i_eval)
 

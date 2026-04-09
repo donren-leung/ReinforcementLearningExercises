@@ -1,12 +1,13 @@
 import math
 from functools import cache
 from collections import defaultdict
-from typing import Mapping, TypeAlias
+from typing import Mapping, TypeAlias, override
 
 import matplotlib.pyplot as plt
 from matplotlib import colors as mcolors
 from matplotlib.axes import Axes
 from matplotlib.patches import Rectangle
+from matplotlib.collections import LineCollection
 import numpy as np
 import scipy.stats as stats
 
@@ -77,16 +78,22 @@ class JacksCarRental(AbstractEnvironment[CarState, int]):
         
         # Cache for transition probabilities p(s', r | s, a) to speed up policy evaluation and improvement.
         # Keyed by (s, a) and returning dict of (s', r) -> probability.
-        self._dynamics_cache: dict[tuple[CarState, int], dict[tuple[CarState, int], float]] = {}
-
         super().__init__(states, [], rewards, gamma)
+        self._dynamics_cache = self._precompute_dynamics()
+
 
     @property
     def size(self) -> CarState:
         return self._size
 
+    @override
     def visualise_value(self, v: CarValue, ax: Axes) -> None:
-        width, height = self.size
+        """
+        Rows: cars at A, cols: cars at B.
+        Colour based on winter scale, from dark blue to green.
+        """
+        A_size, B_size = self.size[0] + 1, self.size[1] + 1
+
         values = np.array([v[s] for s in self.states], dtype=float)
         vmin = float(np.min(values))
         vmax = float(np.max(values))
@@ -94,35 +101,44 @@ class JacksCarRental(AbstractEnvironment[CarState, int]):
             vmax = vmin + 1.0
 
         norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
-        cmap = plt.get_cmap("PuOr")
+        cmap = plt.get_cmap("winter")
 
-        for col in range(width):
-            for row in range(height):
-                s = (col, row)
+        for a_qty in range(A_size):
+            for b_qty in range(B_size):
+                s = (a_qty, b_qty)
                 facecolor = cmap(norm(v[s]))
-                ax.add_patch(Rectangle((col, row), 1, 1, facecolor=facecolor, edgecolor="k"))
+                ax.add_patch(Rectangle((b_qty, a_qty), 1, 1, facecolor=facecolor, edgecolor="k"))
 
                 luminance = 0.299 * facecolor[0] + 0.587 * facecolor[1] + 0.114 * facecolor[2]
                 text_color = "white" if luminance < 0.5 else "black"
                 ax.text(
-                    col + 0.5,
-                    row + 0.55,
-                    f"{v[s]:.2f}",
+                    b_qty + 0.5,
+                    a_qty + 0.55,
+                    f"{round(v[s])}",
                     ha="center",
                     va="center",
-                    fontsize=13,
+                    fontsize=16,
                     color=text_color,
                 )
 
-        ax.set_xlim(0, width)
-        ax.set_ylim(0, height)
-        ax.set_xticks(np.arange(0, width + 1))
-        ax.set_yticks(np.arange(0, height + 1))
+        ax.set_ylim(0, A_size)
+        ax.set_xlim(0, B_size)
+        # place ticks at the centre of each grid cell and label with counts
+        ax.set_yticks(np.arange(0.5, A_size, 1))
+        ax.set_xticks(np.arange(0.5, B_size, 1))
+        ax.set_yticklabels([str(i) for i in range(A_size)])
+        ax.set_xticklabels([str(i) for i in range(B_size)])
+        ax.set_ylabel("Cars at A")
+        ax.set_xlabel("Cars at B")
         ax.set_aspect("equal")
         ax.tick_params(length=0)
-        ax.set_xticklabels([])
-        ax.set_yticklabels([])
+        # make outer border thicker than internal region outlines
+        for spine in ax.spines.values():
+            spine.set_linewidth(2.0)
+            spine.set_zorder(4)
+        ax.set_frame_on(True)
 
+    @override
     def visualise_greedy_policy(self, v_pi: CarValue | None, pi: CarPolicy | None, ax: Axes) -> None:
         """
         Matplotlib visualization of a policy or the greedy policy derived from a value function.
@@ -136,7 +152,7 @@ class JacksCarRental(AbstractEnvironment[CarState, int]):
         Colour based on PuOr scale, with white at 0 and dark orange for positive actions and dark purple for negative actions.
         Label all nonzero actions in the cell.
         """
-        width, height = self.size
+        A_size, B_size = self.size[0] + 1, self.size[1] + 1
 
         # Determine whether we're given a policy or a value function.
         # If given a policy (values are dicts mapping actions->prob), use it directly.
@@ -148,52 +164,133 @@ class JacksCarRental(AbstractEnvironment[CarState, int]):
             pi = self.do_policy_improvement(v_pi)
 
         action_norm = mcolors.TwoSlopeNorm(vmin=min(self.actions), vcenter=0, vmax=max(self.actions))
-        cmap = plt.get_cmap("PuOr")
+        cmap = plt.get_cmap("bwr")
 
-        for col in range(width):
-            for row in range(height):
-                s = (col, row)
+        # First build integer labels (policy keys) and average action map
+        labels = np.zeros((A_size, B_size), dtype=int)
+        avg_actions = np.zeros((A_size, B_size), dtype=float)
+        key_to_id: dict[tuple[int, ...], int] = {}
+        id_to_label: dict[int, str] = {}
+        next_id = 1
+
+        for a_qty in range(A_size):
+            for b_qty in range(B_size):
+                s = (a_qty, b_qty)
                 actions = pi[s]
-                best_actions = [action for action, prob in actions.items() if prob > 0]
-                
-                avg_action = sum(action * prob for action, prob in actions.items())
-                facecolor = cmap(action_norm(avg_action))
+                # policy key = tuple of actions with non-zero probability (sorted)
+                key = tuple(sorted([action for action, prob in actions.items() if prob > 0]))
+                if len(key) == 0:
+                    key = (0,)
+                if key not in key_to_id:
+                    key_to_id[key] = next_id
+                    # human-readable label string (e.g. "+1\n-1")
+                    id_to_label[next_id] = "\n".join(f"{action:+d}" for action in key) if key else "0"
+                    next_id += 1
+                labels[a_qty, b_qty] = key_to_id[key]
+                avg_actions[a_qty, b_qty] = sum(action * prob for action, prob in actions.items())
 
-                ax.add_patch(Rectangle((col, row), 1, 1, facecolor=facecolor, edgecolor="k"))
+        # Draw filled cells without internal edges
+        for a_qty in range(A_size):
+            for b_qty in range(B_size):
+                facecolor = cmap(action_norm(avg_actions[a_qty, b_qty]))
+                ax.add_patch(Rectangle((b_qty, a_qty), 1, 1, facecolor=facecolor, edgecolor=None))
 
-                label = "\n".join(f"{action:+d}" for action in sorted(best_actions)) if best_actions else "0"
+                label = id_to_label[labels[a_qty, b_qty]]
                 luminance = 0.299 * facecolor[0] + 0.587 * facecolor[1] + 0.114 * facecolor[2]
                 text_color = "white" if luminance < 0.5 else "black"
                 ax.text(
-                    col + 0.5,
-                    row + 0.5,
+                    b_qty + 0.5,
+                    a_qty + 0.5,
                     label,
                     ha="center",
                     va="center",
-                    fontsize=9,
+                    fontsize=16,
                     color=text_color,
                 )
 
-        ax.set_xlim(0, width)
-        ax.set_ylim(0, height)
-        ax.set_xticks(np.arange(0, width + 1))
-        ax.set_yticks(np.arange(0, height + 1))
+        # Build boundary segments where neighbouring cells have different policy keys
+        segments_set = set()
+        for a_qty in range(A_size):
+            for b_qty in range(B_size):
+                id_here = labels[a_qty, b_qty]
+                # left
+                if b_qty == 0 or labels[a_qty, b_qty - 1] != id_here:
+                    seg = ((b_qty, a_qty), (b_qty, a_qty + 1))
+                    segments_set.add(tuple(sorted(seg)))
+                # right
+                if b_qty == B_size - 1 or labels[a_qty, b_qty + 1] != id_here:
+                    seg = ((b_qty + 1, a_qty), (b_qty + 1, a_qty + 1))
+                    segments_set.add(tuple(sorted(seg)))
+                # bottom
+                if a_qty == 0 or labels[a_qty - 1, b_qty] != id_here:
+                    seg = ((b_qty, a_qty), (b_qty + 1, a_qty))
+                    segments_set.add(tuple(sorted(seg)))
+                # top
+                if a_qty == A_size - 1 or labels[a_qty + 1, b_qty] != id_here:
+                    seg = ((b_qty, a_qty + 1), (b_qty + 1, a_qty + 1))
+                    segments_set.add(tuple(sorted(seg)))
+
+        segments = [list(seg) for seg in segments_set]
+        if segments:
+            lc = LineCollection(segments, colors="k", linewidths=1.5, zorder=3)
+            ax.add_collection(lc)
+
+        ax.set_ylim(0, A_size)
+        ax.set_xlim(0, B_size)
+        # place ticks at the centre of each grid cell and label with counts
+        ax.set_yticks(np.arange(0.5, A_size, 1))
+        ax.set_xticks(np.arange(0.5, B_size, 1))
+        ax.set_yticklabels([str(i) for i in range(A_size)])
+        ax.set_xticklabels([str(i) for i in range(B_size)])
+        ax.set_ylabel("Cars at A")
+        ax.set_xlabel("Cars at B")
         ax.set_aspect("equal")
         ax.tick_params(length=0)
-        ax.set_xticklabels([])
-        ax.set_yticklabels([])
+        # make outer border thicker than internal region outlines
+        for spine in ax.spines.values():
+            spine.set_linewidth(2.0)
+            spine.set_zorder(4)
+        ax.set_frame_on(True)
 
+    @override
     def get_actions(self, s: CarState) -> list[int]:
         A, B = s[0], s[1]
         min_bound, max_bound = max(-5, -B, A - self.size[0]), min(5, A, self.size[1] - B)
         assert min_bound <= max_bound, f"Invalid state {s} with no valid actions"
         return list(range(min_bound, max_bound + 1))
 
+    @override
     def resultant_states(self, s: CarState, a: int) -> list[CarState]:
         # In the day, cars are returned and hired based on Poisson distributions.
         # Theoretically, this could result in any number of cars at each location.
         return self.states
 
+    # def resultant_rewards(self, s: CarState, a: int, s_prime: CarState) -> list[float]:
+    #     # Given state and action, then we begin the day with known qty of cars:
+    #     s_start_A, s_start_B = (s[0] - a, s[1] + a)
+    #     assert 0 <= s_start_A <= self.size[0]
+    #     assert 0 <= s_start_B <= self.size[1]
+    #     relocation_reward = abs(a) * self.relocate_r
+
+    #     # Then, given the end state, we know how many net cars were rented.
+    #     # Lower bound rentals:
+    #     # If dealer net gained, then 0 rentals could have happened.
+    #     # If dealer net lost, then at least that many rentals must have happened.
+    #     rentals_A_lower = max(0, s_start_A - s_prime[0])
+    #     rentals_B_lower = max(0, s_start_B - s_prime[1])
+
+    #     # Upper bound rentals:
+    #     # At most, all cars that were present at the start of the day could have been rented.
+    #     rentals_A_upper = s_start_A
+    #     rentals_B_upper = s_start_B
+
+    #     rental_reward_lower = (rentals_A_lower + rentals_B_lower) * self.rent_r + relocation_reward
+    #     rental_reward_upper = (rentals_A_upper + rentals_B_upper) * self.rent_r + relocation_reward
+
+    #     # Range of possible rewards is
+    #     return list(range(rental_reward_lower, rental_reward_upper + 1, self.rent_r))
+
+    @override
     def do_action(self, s: CarState, a: int) -> tuple[CarState, float]:
         # First, apply the action
         s_start_A, s_start_B = (s[0] - a, s[1] + a)
@@ -212,19 +309,17 @@ class JacksCarRental(AbstractEnvironment[CarState, int]):
 
         return (s_night_A, s_night_B), (rentals_A + rentals_B) * self.rent_r + abs(a) * self.relocate_r
 
-    def _precompute_dynamics(self):
+    def _precompute_dynamics(self) -> dict[tuple[CarState, int], dict]:
         """
-        Precompute the transition probabilities p(s', r | s, a) for all s, a, s', r.
-        Loop for all s in S:
-            Loop for all a in A(s):
-                All s' possible, but potentially through different rental/return outcomes
-                Loop for all s' in S:
-                    Loop for all valid rental/return outcomes that could lead to s':
-                        Compute probability, reward for that outcome, and add to p(s', r|s, a)
-        """
-        if self._dynamics_cache:
-            return
+        Precompute aggregated transition information for all (s, a).
 
+        Instead of storing the full joint p(s', r | s, a), we aggregate into:
+            - p_sprime: dict mapping s' -> p(s' | s, a)
+            - E_r: scalar expected immediate reward E[r | s, a]
+
+        This reduces per-sweep work during policy evaluation because we can
+        compute q(s,a) = E_r + gamma * sum_{s'} p_sprime[s'] * v[s'].
+        """
         A_probs = compute_dealer_probs(self.size[0], self.lambda_a[0], self.lambda_a[1])
         B_probs = compute_dealer_probs(self.size[1], self.lambda_b[0], self.lambda_b[1])
         A_probs_tails = np.cumsum(A_probs[::-1, :], axis=0)[::-1, :]
@@ -238,6 +333,8 @@ class JacksCarRental(AbstractEnvironment[CarState, int]):
             start: self.compute_joint(B_probs, B_probs_tails, start, self.size[1])
             for start in range(self.size[1] + 1)
         }
+        
+        dynamics_cache = {}
         for s in self.states:
             for a in self.get_actions(s):
                 s_start_A, s_start_B = (s[0] - a, s[1] + a)
@@ -246,7 +343,10 @@ class JacksCarRental(AbstractEnvironment[CarState, int]):
                 joint_B = joint_B_by_start[s_start_B]
 
                 move_reward = abs(a) * self.relocate_r
-                transition_probs: dict[tuple[CarState, int], float] = defaultdict(float)
+
+                # Aggregate per-successor marginal probabilities and expected reward
+                p_sprime: dict[CarState, float] = defaultdict(float)
+                E_r = 0.0
 
                 for (s_prime_A, reward_A), prob_A in joint_A.items():
                     if prob_A == 0.0:
@@ -256,13 +356,19 @@ class JacksCarRental(AbstractEnvironment[CarState, int]):
                             continue
                         s_prime = (s_prime_A, s_prime_B)
                         reward = reward_A + reward_B + move_reward
-                        transition_probs[(s_prime, reward)] += prob_A * prob_B
+                        p = prob_A * prob_B
+                        p_sprime[s_prime] += p
+                        E_r += p * reward
 
-                total_prob = sum(transition_probs.values())
+                total_prob = sum(p_sprime.values())
                 assert np.isclose(total_prob, 1.0, atol=1e-12), (
                     f"Transition probabilities should sum to 1 for (s={s}, a={a}), got {total_prob}"
                 )
-                self._dynamics_cache[(s, a)] = dict(transition_probs)
+
+                # Store aggregated marginals and expected reward for fast DP use.
+                dynamics_cache[(s, a)] = {"p_sprime": dict(p_sprime), "E_r": float(E_r)}
+
+        return dynamics_cache
 
     def compute_joint(self, probs: np.ndarray, tail_probs: np.ndarray, start: int, capacity: int) -> dict[tuple[int, int], float]:
         """
@@ -292,11 +398,23 @@ class JacksCarRental(AbstractEnvironment[CarState, int]):
 
         return dict(joint_probs)
 
+    @override
+    def expected_reward(self, s: CarState, a: int) -> float:
+        # Return precomputed expected immediate reward E[r | s, a]
+        entry = self._dynamics_cache.get((s, a))
+        if entry is None:
+            return 0.0
+        return float(entry.get("E_r", 0.0))
 
-    def dynamics(self, s_prime: CarState, r: float, s: CarState, a: int) -> float:
-        if not self._dynamics_cache:
-            self._precompute_dynamics()
-        return self._dynamics_cache.get((s, a), {}).get((s_prime, int(r)), 0.0)
+    @override
+    def transition_probs(self, s_prime: CarState, s: CarState, a: int) -> float:
+        entry = self._dynamics_cache.get((s, a))
+        if entry is None:
+            return 0.0
+        return float(entry.get("p_sprime", {}).get(s_prime, 0.0))
+
+    # def dynamics(self, s_prime: CarState, r: float, s: CarState, a: int) -> float:
+    #     return self._dynamics_cache.get((s, a), {}).get((s_prime, int(r)), 0.0)
 
 
 def compute_dealer_probs(capacity: int, lamb_rental: float, lamb_return: float) -> np.ndarray:

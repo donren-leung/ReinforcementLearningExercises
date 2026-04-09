@@ -1,4 +1,5 @@
 from abc import abstractmethod, ABC
+from collections import defaultdict
 from copy import deepcopy
 from typing import Generic, Hashable, Mapping, TypeAlias, TypeVar
 
@@ -7,9 +8,6 @@ from dp.environments.protocols import ValueLike, PolicyLike
 
 StateT = TypeVar("StateT", bound=Hashable)
 ActionT = TypeVar("ActionT", bound=Hashable)
-
-ValueT = ValueLike[StateT]
-PolicyT = PolicyLike[StateT, ActionT]
 
 class Agent(ABC, Generic[StateT, ActionT]):
     def __init__(self, env: AbstractEnvironment[StateT, ActionT]):
@@ -22,7 +20,7 @@ class Agent(ABC, Generic[StateT, ActionT]):
 
     @property
     @abstractmethod
-    def full_policy(self) -> PolicyT:
+    def full_policy(self) -> PolicyLike[StateT, ActionT]:
         ...
 
 class RandomAgent(Agent[StateT, ActionT]):
@@ -34,14 +32,30 @@ class RandomAgent(Agent[StateT, ActionT]):
         return {a: p for a in actions}
 
     @property
-    def full_policy(self) -> PolicyT:
+    def full_policy(self) -> PolicyLike[StateT, ActionT]:
+        return {s: self.state_policy(s) for s in self.env.states}
+
+class ConstantAgent(Agent[StateT, ActionT]):
+    def __init__(self, env: AbstractEnvironment[StateT, ActionT], action: ActionT):
+        super().__init__(env)
+        for s in env.states:
+            assert action in env.get_actions(s), f"Action {action} not valid for state {s}"
+        self._action = action
+
+    def state_policy(self, state: StateT) -> Mapping[ActionT, float]:
+        d = defaultdict(float)
+        d[self._action] = 1.0
+        return d
+
+    @property
+    def full_policy(self) -> PolicyLike[StateT, ActionT]:
         return {s: self.state_policy(s) for s in self.env.states}
 
 class LearnableAgent(Agent[StateT, ActionT]):
     """
     Acts according to a dynamically assigned policy, which can be updated by calling `update_policy`.
     """
-    def __init__(self, env: AbstractEnvironment[StateT, ActionT], policy: PolicyT | None):
+    def __init__(self, env: AbstractEnvironment[StateT, ActionT], policy: PolicyLike[StateT, ActionT] | None):
         super().__init__(env)
         if policy is None:
             random_agent = RandomAgent(env)
@@ -52,8 +66,8 @@ class LearnableAgent(Agent[StateT, ActionT]):
         return self._policy.get(state, {})
 
     @property
-    def full_policy(self) -> PolicyT:
+    def full_policy(self) -> PolicyLike[StateT, ActionT]:
         return {s: self.state_policy(s) for s in self.env.states}
 
-    def assign_policy(self, policy: PolicyT):
+    def assign_policy(self, policy: PolicyLike[StateT, ActionT]) -> None:
         self._policy = deepcopy(policy)
