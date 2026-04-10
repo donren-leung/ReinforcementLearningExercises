@@ -38,7 +38,7 @@ class GridWorldEnv(AbstractEnvironment[GridState, str]):
     def size(self) -> tuple[int, int]:
         return self._size
 
-    def visualise_value(self, v: GridValue, ax: Axes) -> None:
+    def visualise_value(self, v: GridValue, ax: Axes, invert: bool) -> None:
         width, height = self._size
 
         for col in range(width):
@@ -63,7 +63,8 @@ class GridWorldEnv(AbstractEnvironment[GridState, str]):
             v_pi: GridValue | None,
             pi: GridPolicy | None,
             ax: Axes,
-            arrow_len: float=0.45
+            invert: bool,
+            arrow_len: float=0.45,
     ) -> None:
         """
         Matplotlib visualization of a policy or the greedy policy derived from a value function.

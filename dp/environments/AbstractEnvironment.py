@@ -242,6 +242,7 @@ class AbstractEnvironment(ABC, Generic[StateT, ActionT], DpVisualisableEnv[State
                 print(f"Current policy: {policy_i}")
                 print(f"Current value function: {v_i}")
             v_i_eval, k = self.do_policy_eval(policy_i, v_i, threshold)
+            print(f"Policy evaluation took {k} iterations to converge.")
             policy_i_prime = self.do_policy_improvement(v_i_eval)
 
             if save_intermediates:
@@ -256,9 +257,9 @@ class AbstractEnvironment(ABC, Generic[StateT, ActionT], DpVisualisableEnv[State
             policy_i = policy_i_prime
 
     @abstractmethod
-    def visualise_value(self, v: ValueT, ax: Axes) -> None:
+    def visualise_value(self, v: ValueT, ax: Axes, invert: bool) -> None:
         raise NotImplementedError
 
     @abstractmethod
-    def visualise_greedy_policy(self, v_pi: ValueT | None, pi: PolicyT | None, ax: Axes) -> None:
+    def visualise_greedy_policy(self, v_pi: ValueT | None, pi: PolicyT | None, ax: Axes, invert: bool) -> None:
         raise NotImplementedError

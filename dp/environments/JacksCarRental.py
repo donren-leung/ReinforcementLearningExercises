@@ -87,7 +87,7 @@ class JacksCarRental(AbstractEnvironment[CarState, int]):
         return self._size
 
     @override
-    def visualise_value(self, v: CarValue, ax: Axes) -> None:
+    def visualise_value(self, v: CarValue, ax: Axes, invert: bool) -> None:
         """
         Rows: cars at A, cols: cars at B.
         Colour based on winter scale, from dark blue to green.
@@ -136,10 +136,12 @@ class JacksCarRental(AbstractEnvironment[CarState, int]):
         for spine in ax.spines.values():
             spine.set_linewidth(2.0)
             spine.set_zorder(4)
+        if invert:
+            ax.invert_yaxis()
         ax.set_frame_on(True)
 
     @override
-    def visualise_greedy_policy(self, v_pi: CarValue | None, pi: CarPolicy | None, ax: Axes) -> None:
+    def visualise_greedy_policy(self, v_pi: CarValue | None, pi: CarPolicy | None, ax: Axes, invert: bool) -> None:
         """
         Matplotlib visualization of a policy or the greedy policy derived from a value function.
 
@@ -250,6 +252,8 @@ class JacksCarRental(AbstractEnvironment[CarState, int]):
         for spine in ax.spines.values():
             spine.set_linewidth(2.0)
             spine.set_zorder(4)
+        if invert:
+            ax.invert_yaxis()
         ax.set_frame_on(True)
 
     @override
@@ -294,8 +298,7 @@ class JacksCarRental(AbstractEnvironment[CarState, int]):
     def do_action(self, s: CarState, a: int) -> tuple[CarState, float]:
         # First, apply the action
         s_start_A, s_start_B = (s[0] - a, s[1] + a)
-        assert 0 <= s_start_A <= self.size[0]
-        assert 0 <= s_start_B <= self.size[1]
+        relocation_reward = self.calc_move_reward(s, a)
 
         # Second, sample rental requests
         rentals_A = min(s_start_A, np.random.poisson(self.lambda_a[0]))
@@ -307,7 +310,14 @@ class JacksCarRental(AbstractEnvironment[CarState, int]):
         s_night_A = min(self.size[0], s_cob_A + np.random.poisson(self.lambda_a[1]))
         s_night_B = min(self.size[1], s_cob_B + np.random.poisson(self.lambda_b[1]))
 
-        return (s_night_A, s_night_B), (rentals_A + rentals_B) * self.rent_r + abs(a) * self.relocate_r
+        return (s_night_A, s_night_B), (rentals_A + rentals_B) * self.rent_r + relocation_reward
+
+    def calc_move_reward(self, s: CarState, a: int) -> float:
+        s_start_A, s_start_B = (s[0] - a, s[1] + a)
+        assert 0 <= s_start_A <= self.size[0]
+        assert 0 <= s_start_B <= self.size[1]
+
+        return abs(a) * self.relocate_r
 
     def _precompute_dynamics(self) -> dict[tuple[CarState, int], dict]:
         """
@@ -342,7 +352,7 @@ class JacksCarRental(AbstractEnvironment[CarState, int]):
                 joint_A = joint_A_by_start[s_start_A]
                 joint_B = joint_B_by_start[s_start_B]
 
-                move_reward = abs(a) * self.relocate_r
+                move_reward = self.calc_move_reward(s, a)
 
                 # Aggregate per-successor marginal probabilities and expected reward
                 p_sprime: dict[CarState, float] = defaultdict(float)
@@ -447,3 +457,46 @@ def compute_dealer_probs(capacity: int, lamb_rental: float, lamb_return: float) 
 def poisson_prob(n: int, lamb: float):
     return (lamb**n * math.exp(-lamb)) / math.factorial(n)
 
+class ModifiedJacksCarRental(JacksCarRental):
+    """
+    Exercise 4.7 (programming) Write a program for policy iteration and re-solve Jack's car
+    rental problem with the following changes. One of Jack's employees at the first location
+    rides a bus home each night and lives near the second location. She is happy to shuttle
+    one car to the second location for free. Each additional car still costs $2, as do all cars
+    moved in the other direction. In addition, Jack has limited parking space at each location.
+    If more than 10 cars are kept overnight at a location (after any moving of cars), then an
+    additional cost of $4 must be incurred to use a second parking lot (independent of how
+    many cars are kept there). These sorts of nonlinearities and arbitrary dynamics often
+    occur in real problems and cannot easily be handled by optimization methods other than
+    dynamic programming. To check your program, first replicate the results given for the
+    original problem. 
+    """
+
+    def __init__(
+            self,
+            size: CarState,
+            rent_r: int,
+            relocate_r: int,
+            lambda_a: tuple[float, float],
+            lambda_b: tuple[float, float],
+            action_cap: int,
+            gamma: float
+    ):
+        super().__init__(size, rent_r, relocate_r, lambda_a, lambda_b, action_cap, gamma)
+
+    @override
+    def calc_move_reward(self, s: CarState, a: int) -> float:
+        s_start_A, s_start_B = (s[0] - a, s[1] + a)
+        assert 0 <= s_start_A <= self.size[0]
+        assert 0 <= s_start_B <= self.size[1]
+
+        if a > 0:
+            # Moving from A to B, first car is free
+            relocation_reward = (a - 1) * self.relocate_r
+        else:
+            relocation_reward = -a * self.relocate_r
+
+        if s_start_A > 10 or s_start_B > 10:
+            relocation_reward -= 4
+
+        return relocation_reward    

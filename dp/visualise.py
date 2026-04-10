@@ -69,7 +69,8 @@ def record_policy_evaluation(env: DpVisualisableEnv[StateT, ActionT],
 def visualise_snapshots(snapshots: list[tuple[int, ValueLike[StateT]]],
                         env: DpVisualisableEnv[StateT, ActionT],
                         path: Path,
-                        policy_name: str
+                        policy_name: str,
+                        invert: bool
                         ) -> None:
     n = len(snapshots)
     width, height = env.size
@@ -88,17 +89,18 @@ def visualise_snapshots(snapshots: list[tuple[int, ValueLike[StateT]]],
     for row_idx, (step, V) in enumerate(snapshots):
         print("Visualising policy evaluation at step", step)
         _write_gutter_label(axs[row_idx, 0], f"k = {step}", fontsize=18)
-        env.visualise_value(V, ax=axs[row_idx, 1])
+        env.visualise_value(V, ax=axs[row_idx, 1], invert=invert)
         print("Visualising greedy policy at step", step)
-        env.visualise_greedy_policy(V, None, ax=axs[row_idx, 2])
+        env.visualise_greedy_policy(V, None, ax=axs[row_idx, 2], invert=invert)
 
     fig.tight_layout()
     fig.savefig(path)
 
 def visualise_policy_iteration_history(
         history: list[tuple[ValueLike[StateT], int, PolicyLike[StateT, ActionT]]],
-    env: DpVisualisableEnv[StateT, ActionT],
-        path: Path
+        env: DpVisualisableEnv[StateT, ActionT],
+        path: Path,
+        invert: bool
 ) -> None:
     """
     Visualise the policy iteration history as a 2 x N subplot grid.
@@ -135,8 +137,8 @@ def visualise_policy_iteration_history(
         _write_gutter_label(axs[2, plot_col], rf"(eval converged in {k} steps)", fontsize=16)
 
         # visualise the policy and corresponding value
-        env.visualise_greedy_policy(None, pi_prime, ax=axs[0, plot_col])
-        env.visualise_value(v_eval, ax=axs[1, plot_col])
+        env.visualise_greedy_policy(None, pi_prime, ax=axs[0, plot_col], invert=invert)
+        env.visualise_value(v_eval, ax=axs[1, plot_col], invert=invert)
 
     fig.tight_layout()
     fig.savefig(path)

@@ -24,6 +24,11 @@ PolicyLike: TypeAlias = Mapping[StateT, ActionProbLike[ActionT]]
 ValueT = ValueLike[StateT]
 PolicyT = PolicyLike[StateT, ActionT]
 
+# @runtime_checkable
+# class FourArgumentDynamics(Protocol[StateT, ActionT]):
+#     def dynamics(self, s_prime: StateT, r: float, s: StateT, a: ActionT) -> float:
+#         ...
+
 @runtime_checkable
 class DpVisualisableEnv(Protocol[StateT, ActionT]):
     """
@@ -69,7 +74,7 @@ class DpVisualisableEnv(Protocol[StateT, ActionT]):
     ]:
         ...
 
-    def visualise_value(self, v: ValueLike[StateT], ax: Axes) -> None:
+    def visualise_value(self, v: ValueLike[StateT], ax: Axes, invert: bool) -> None:
         ...
 
     def visualise_greedy_policy(
@@ -77,5 +82,6 @@ class DpVisualisableEnv(Protocol[StateT, ActionT]):
         v_pi: ValueLike[StateT] | None,
         pi: PolicyLike[StateT, ActionT] | None,
         ax: Axes,
+        invert: bool,
     ) -> None:
         ...

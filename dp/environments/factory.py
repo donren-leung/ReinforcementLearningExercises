@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Hashable, TypeAlias
 
 from dp.environments.AbstractEnvironment import AbstractEnvironment
-from dp.environments.JacksCarRental import JacksCarRental
+from dp.environments.JacksCarRental import JacksCarRental, ModifiedJacksCarRental
 from dp.environments.GridWorld import EscapeGridWorldEnv, JumpingGridWorldEnv, GridState
 
 GridJump: TypeAlias = tuple[GridState, GridState, float]
@@ -60,7 +60,6 @@ def make_jacks_env(
     relocate_r: int = DEFAULT_JACKS_RELOCATE_R,
     lambda_a: tuple[float, float] = DEFAULT_JACKS_LAMBDA_A,
     lambda_b: tuple[float, float] = DEFAULT_JACKS_LAMBDA_B,
-    cap: int = DEFAULT_JACKS_CAP,
     action_cap: int = DEFAULT_JACKS_ACTION_CAP,
     gamma: float = DEFAULT_JACKS_GAMMA,
 ) -> JacksCarRental:
@@ -74,6 +73,24 @@ def make_jacks_env(
         gamma=gamma,
     )
 
+def make_modified_jacks_env(
+    size: tuple[int, int] = DEFAULT_JACKS_SIZE,
+    rent_r: int = DEFAULT_JACKS_RENT_R,
+    relocate_r: int = DEFAULT_JACKS_RELOCATE_R,
+    lambda_a: tuple[float, float] = DEFAULT_JACKS_LAMBDA_A,
+    lambda_b: tuple[float, float] = DEFAULT_JACKS_LAMBDA_B,
+    action_cap: int = DEFAULT_JACKS_ACTION_CAP,
+    gamma: float = DEFAULT_JACKS_GAMMA,
+) -> ModifiedJacksCarRental:
+    return ModifiedJacksCarRental(
+        size=size,
+        rent_r=rent_r,
+        relocate_r=relocate_r,
+        lambda_a=lambda_a,
+        lambda_b=lambda_b,
+        action_cap=action_cap,
+        gamma=gamma,
+    )
 
 def make_jacks_small_env(
     size: tuple[int, int] = SMALL_JACKS_SIZE,
@@ -103,6 +120,8 @@ def make_env(env_name: str) -> AbstractEnvironment:
         return make_jumping_env()
     if env_name == "jacks":
         return make_jacks_env()
+    if env_name == "modjacks":
+        return make_modified_jacks_env()
     if env_name == "jacks-small":
         return make_jacks_small_env()
     raise ValueError(
