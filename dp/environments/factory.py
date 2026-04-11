@@ -5,6 +5,7 @@ from typing import Hashable, TypeAlias
 from dp.environments.AbstractEnvironment import AbstractEnvironment
 from dp.environments.JacksCarRental import JacksCarRental, ModifiedJacksCarRental
 from dp.environments.GridWorld import EscapeGridWorldEnv, JumpingGridWorldEnv, GridState
+from dp.environments.GamblersProblem import GamblersProblem
 
 GridJump: TypeAlias = tuple[GridState, GridState, float]
 
@@ -124,6 +125,9 @@ def make_env(env_name: str) -> AbstractEnvironment:
         return make_modified_jacks_env()
     if env_name == "jacks-small":
         return make_jacks_small_env()
+    if env_name.startswith("gamblers-"):
+        ph = float(env_name[len("gamblers-"):])
+        return GamblersProblem(goal=100, ph=ph, gamma=1.0)
     raise ValueError(
         f"Unknown environment {env_name!r}. Expected 'escape', 'jumping', 'jacks', or 'jacks-small'."
     )

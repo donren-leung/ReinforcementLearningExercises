@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from copy import deepcopy
+import math
 from typing import Any, Generic, Hashable, TypeVar, TypeAlias, Sequence, final
 
 from dp.environments.protocols import DpVisualisableEnv, ValueLike, PolicyLike
@@ -185,9 +186,9 @@ class AbstractEnvironment(ABC, Generic[StateT, ActionT], DpVisualisableEnv[State
 
             # Find the max q_pi(s, a) and the number of actions that achieve this to divide prob equally
             max_q = max(q_pi.values()) if len(q_pi) > 0 else float("-inf")
-            num_greedy = sum(1 for q in q_pi.values() if q == max_q)
+            num_greedy = sum(1 for q in q_pi.values() if math.isclose(q, max_q))
             optimal_prob = 1/num_greedy if num_greedy > 0 else 0
-            pi_new[s] = {a: optimal_prob if q_pi[a] == max_q else 0 for a in self.get_actions(s)}
+            pi_new[s] = {a: optimal_prob if math.isclose(q_pi[a], max_q) else 0 for a in self.get_actions(s)}
 
         return pi_new
 
@@ -247,7 +248,7 @@ class AbstractEnvironment(ABC, Generic[StateT, ActionT], DpVisualisableEnv[State
 
             if save_intermediates:
                 history.append((deepcopy(v_i_eval), k, deepcopy(policy_i)))
-            
+
             if self.cmp_policy(policy_i, policy_i_prime):
                 # Policy is stable under greedy improvement, so v_i_eval is already optimal.
                 # No extra history entry is needed.
@@ -255,6 +256,24 @@ class AbstractEnvironment(ABC, Generic[StateT, ActionT], DpVisualisableEnv[State
 
             v_i = v_i_eval
             policy_i = policy_i_prime
+
+    @final
+    def do_value_iteration(self, v_0: ValueT, threshold: float) -> tuple[ValueT, list[ValueT]]:
+        v_curr = v_0
+        history: list[ValueT] = []
+        while True:
+            v_new: dict[StateT, float] = {
+                s: max(self.q_pi(s, a, v_curr) for a in self.get_actions(s)) if not self.is_terminal(s) else v_curr[s]
+                for s in self.states
+            }
+
+            history.append(deepcopy(v_curr))
+            delta = max(abs(v_new[s] - v_curr[s]) for s in self.states)
+            if delta < threshold:
+                break
+            v_curr = v_new
+
+        return v_new, history
 
     @abstractmethod
     def visualise_value(self, v: ValueT, ax: Axes, invert: bool) -> None:
