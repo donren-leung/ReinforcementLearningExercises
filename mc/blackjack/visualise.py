@@ -4,8 +4,6 @@ import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
-from mc.blackjack.agent import MCBlackJackAgent
-
 # def plot_policy(agent: MCBlackJackAgent) -> None:
 #     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
@@ -28,33 +26,50 @@ from mc.blackjack.agent import MCBlackJackAgent
 #     plt.tight_layout()
 #     plt.show()
 
-def plot_value(agent: MCBlackJackAgent) -> Figure:
-    fig = plt.figure(figsize=(8, 8))
+def plot_value(snapshots: list[tuple[int, tuple[np.ndarray, np.ndarray]]]) -> Figure:
+    n_columns = len(snapshots)
+    fig = plt.figure(figsize=(6 * n_columns + 2.2, 10))
     gs = fig.add_gridspec(
-        ncols=2,
-        nrows=3,
-        width_ratios=[0.2, 1],
-        height_ratios=[0.2, 1, 1],
-        hspace=-0.1,
-        wspace=0.02,
+        nrows=2,
+        ncols=n_columns + 1,
+        width_ratios=[0.1] + [1] * n_columns,
+        height_ratios=[1, 1],
+        hspace=-0.26,
+        wspace=0.05,
     )
-    # create first-column 2D axes and second-column 3D axes
-    header_axes = [[fig.add_subplot(gs[0, 1])]]
-    write_gutter_label(header_axes[0][0], f"After {agent.total_episodes} episodes", fontsize=16, x=0.5, y=0.5)
 
-    axes = [[fig.add_subplot(gs[i, 0]), fig.add_subplot(gs[i, 1], projection="3d")] for i in range(1, 3)]
-
-    # dealer showing 1..10, player sum 12..21, 
     X, Y = np.meshgrid(range(1, 11), range(12, 22))
-    for row_idx, usable_ace in enumerate([True, False]):
-        write_gutter_label(axes[row_idx][0], f"{"Usable\nace" if usable_ace else "No\nusable\nace"}", fontsize=14, x=0.8, y=0.5)
-        ax = axes[row_idx][1]
-        grid = agent.build_value_grid(usable_ace)
+    row_labels = ["Usable\nace", "No\nusable\nace"]
 
-        ax.plot_wireframe(X, Y, grid, rstride=1, cstride=1)
-        style_blackjack_ax(ax, row_idx)
+    for column_index, (episodes, value_grids) in enumerate(snapshots):
+        for row_index, (row_label, grid) in enumerate(zip(row_labels, value_grids)):
+            if column_index == 0:
+                label_ax = fig.add_subplot(gs[row_index, 0])
+                write_gutter_label(label_ax, row_label, fontsize=18, x=0.4, y=0.5)
 
-    fig.subplots_adjust(top=0.96, bottom=0.04, left=0.04, right=0.98)
+            ax = fig.add_subplot(gs[row_index, column_index + 1], projection="3d")
+            ax.plot_wireframe(X, Y, grid, rstride=1, cstride=1)
+            style_blackjack_ax(ax, row_index, show_labels=column_index == n_columns - 1)
+
+            if row_index == 0:
+                ax.set_zorder(2)
+                bbox = ax.get_position()
+            elif row_index == 1:
+                ax.set_zorder(1)
+
+    # fig.subplots_adjust(top=0.9, bottom=0.1, left=0.02, right=0.98) 
+    fig.canvas.draw()
+    for column_index, (episodes, _) in enumerate(snapshots):
+        cell = gs[0, column_index + 1].get_position(fig)
+        fig.text(
+            x=(cell.x0 + cell.x1) / 2,
+            y=min(0.80, cell.y1 + 0.02),
+            s=f"After {episodes:,} episodes",
+            ha="center",
+            va="bottom",
+            fontsize=20,
+        )
+
     return fig
 
 def write_gutter_label(ax: Axes, text: str, x: float, y: float, fontsize: int=18) -> None:
@@ -70,31 +85,27 @@ def write_gutter_label(ax: Axes, text: str, x: float, y: float, fontsize: int=18
         zorder=999
     )
 
-def style_blackjack_ax(ax, row_idx: int):
+def style_blackjack_ax(ax, row_idx: int, show_labels: bool):
     ax.set_xlim(1, 10)
     ax.set_ylim(12, 21)
     ax.set_zlim(-1, 1)
 
 
-    if row_idx == 0:
-        ax.set_xticks([])
-        ax.set_yticks([])
-        ax.set_zticks([])
-        ax.text(1-0.4, 12-0.4, -1, "-1", zdir=None, ha="center", va="center")
-        ax.text(1-0.4, 12-0.4,  1, "+1", zdir=None, ha="center", va="center")
-    if row_idx == 1:
-        ax.set_xticks([])
-        ax.set_yticks([])
-        ax.set_zticks([])
-        # ax.set_xlabel("Dealer showing", labelpad=-10)
-        # ax.set_ylabel("Player sum", labelpad=-10)
-        ax.text((10+2-0.5)/2, 12-0.8, -1, "Dealer showing", zdir="x", ha="center", va="center")
-        ax.text(2-0.5,        12-0.8, -1, "A", zdir="x", ha="center", va="center")
-        ax.text(10-0.2,       12-0.8, -1, "10", zdir="x", ha="center", va="center")
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_zticks([])
 
-        ax.text(10+0.8, (20+12)/2, -1, "Player sum", zdir="y", ha="center", va="center")
-        ax.text(10+0.8, 12+0.5,    -1, "12", zdir="y", ha="center", va="center")
-        ax.text(10+0.8, 20+0.5,    -1, "21", zdir="y", ha="center", va="center")
+    if show_labels and row_idx == 0:
+        ax.text(1 - 0.4, 12 - 0.4, -1, "-1", zdir=None, ha="center", va="center", fontsize=14)
+        ax.text(1 - 0.4, 12 - 0.4, 1, "+1", zdir=None, ha="center", va="center", fontsize=14)
+    elif show_labels:
+        ax.text((10 + 2 - 0.5) / 2, 12 - 0.8, -1, "Dealer showing", zdir="x", ha="center", va="center", fontsize=14)
+        ax.text(2 - 0.5,            12 - 0.8, -1, "A", zdir="x", ha="center", va="center", fontsize=14)
+        ax.text(10 - 0.2,           12 - 0.8, -1, "10", zdir="x", ha="center", va="center", fontsize=14)
+
+        ax.text(10 + 0.8, (20 + 12) / 2, -1, "Player sum", zdir="y", ha="center", va="center", fontsize=14)
+        ax.text(10 + 0.8, 12 + 0.5,      -1, "12", zdir="y", ha="center", va="center", fontsize=14)
+        ax.text(10 + 0.8, 20 + 0.5,      -1, "21", zdir="y", ha="center", va="center", fontsize=14)
 
     ax.tick_params(axis="x", pad=-2)
     ax.tick_params(axis="y", pad=-2)
@@ -112,7 +123,7 @@ def style_blackjack_ax(ax, row_idx: int):
         axis.pane.set_edgecolor((0, 0, 0, 0))
 
     ax.set_proj_type("persp", focal_length=0.30)
-    ax.view_init(elev=30, azim=-65)
+    ax.view_init(elev=25, azim=-70)
 
     # flatter z dimension
     ax.set_box_aspect((10, 10, 2.5), zoom=0.95)
