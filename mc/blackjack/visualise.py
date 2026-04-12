@@ -5,9 +5,11 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.colors import ListedColormap
 
-from mc.blackjack.agent import HIT, STICK
+from mc.blackjack.agents.agent import HIT, STICK
 
-def plot_policy(policy_grids: tuple[np.ndarray, np.ndarray], value_grids: tuple[np.ndarray, np.ndarray]) -> Figure:
+def plot_policy(policy_grids: tuple[np.ndarray, np.ndarray],
+                value_grids: tuple[np.ndarray, np.ndarray],
+                optimal_pi: bool) -> Figure:
     old_rcParams = plt.rcParams["mathtext.fontset"]
     plt.rcParams["mathtext.fontset"] = "cm"
     fig = plt.figure(figsize=(12, 8))
@@ -39,7 +41,10 @@ def plot_policy(policy_grids: tuple[np.ndarray, np.ndarray], value_grids: tuple[
     for row_index, (policy_grid, value_grid) in enumerate(zip(policy_grids, value_grids)):
         policy_ax = fig.add_subplot(inner[row_index, 0])
         if row_index == 0:
-            policy_ax.set_title(r"$\pi_*$", fontsize=30, va="bottom")
+            if optimal_pi:
+                policy_ax.set_title(r"$\pi_*$", fontsize=30, va="bottom")
+            else:
+                policy_ax.set_title(r"$\pi$", fontsize=30, va="bottom")
         policy_ax.imshow(policy_grid, aspect="auto", vmin=0, vmax=1, cmap=cmap, origin="lower")
         policy_ax.set_xlabel("Dealer showing")
         policy_ax.set_xticks(range(10), labels=["A"] + list(str(i) for i in range(2, 11)))
@@ -57,7 +62,10 @@ def plot_policy(policy_grids: tuple[np.ndarray, np.ndarray], value_grids: tuple[
 
         value_ax = fig.add_subplot(inner[row_index, 1], projection="3d")
         if row_index == 0:
-            value_ax.set_title(r"$v_{*}$", fontsize=30, va="bottom")
+            if optimal_pi:
+                value_ax.set_title(r"$v_{*}$", fontsize=30, va="bottom")
+            else:
+                value_ax.set_title(r"$v^{\pi}$", fontsize=30, va="bottom")
         wf = value_ax.plot_wireframe(X, Y, value_grid, rstride=1, cstride=1)
         wf.set_clip_on(False)
         style_blackjack_ax(value_ax, row_index, show_labels=True,

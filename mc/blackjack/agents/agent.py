@@ -8,8 +8,7 @@ from gymnasium.spaces import Discrete
 
 import numpy as np
 
-
-from mc.blackjack.utils import argmax
+from mc.blackjack.utils import argmax, soften_policy
 
 ObsType = TypeVar("ObsType")
 ActType = TypeVar("ActType")
@@ -225,12 +224,14 @@ class MC_EpsGreedy_BlackjackAgent(MC_ES_BlackjackAgent):
     def __init__(self, env: Env, gamma: float, pi: BlackJackPolicyT, epsilon: float=0.1):
         super().__init__(env, gamma, pi, fixed_pi=False)
         self.epsilon = epsilon
+        self.pi = soften_policy(pi, epsilon)
 
     @property
     @override
     def name(self) -> str:
         return f"mc_eps-{self.epsilon:.2f}greedy"
 
+    @override
     def get_action(self, state: BlackJackObsT) -> BlackJackActT:
         action_probs = self.pi[state]
         # sample action according to epsilon-greedy distribution
@@ -266,3 +267,4 @@ class MC_EpsGreedy_BlackjackAgent(MC_ES_BlackjackAgent):
             obs = next_obs
 
         return history
+
