@@ -23,18 +23,6 @@ def _write_gutter_label(ax: Axes, text: str, fontsize: int = 18) -> None:
         fontsize=fontsize,
     )
 
-# def policies_have_same_optimal_actions(policy_a: GridPolicy, policy_b: GridPolicy) -> bool:
-#     if set(policy_a.keys()) != set(policy_b.keys()):
-#         raise ValueError(f"Policies have different state keys {set(policy_a.keys())} vs {set(policy_b.keys())}")
-
-#     for state in policy_a.keys():
-#         actions_a = {action for action, prob in policy_a[state].items() if prob > 0}
-#         actions_b = {action for action, prob in policy_b[state].items() if prob > 0}
-#         if actions_a != actions_b:
-#             return False
-
-#     return True
-
 def record_policy_evaluation(env: DpVisualisableEnv[StateT, ActionT],
                              V_0: ValueLike[StateT],
                              policy: PolicyLike[StateT, ActionT],

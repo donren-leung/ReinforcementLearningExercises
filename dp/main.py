@@ -108,7 +108,7 @@ def do_value_iter_main(results_folder: Path, env: AbstractEnvironment, invert: b
     visualise_snapshots(selected_steps, env, results_folder / "value_iteration_history.png", "Value function", invert)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run gridworld experiments (eval or iter)")
+    parser = argparse.ArgumentParser(description="Run tabular dp experiments (policy eval/iter or value iter)")
     parser.add_argument("results_folder", type=Path, help="Folder to save generated figures and results")
     parser.add_argument("--mode", "-m", choices=["eval", "iter", "value"], default="eval",
                         help="Mode to run: 'eval' runs evaluation flows; 'iter' runs policy iteration; 'value' runs value iteration")
