@@ -1,13 +1,13 @@
 from collections import Counter
 from typing import override, Mapping
 
-from gymnasium import Env
+from gymnasium.envs.toy_text.blackjack import BlackjackEnv
 import numpy as np
 
-from mc.blackjack.utils import argmax, soften_policy
-from mc.blackjack.agents.agent import MC_ES_BlackjackAgent
+from model_free.blackjack.utils import argmax, soften_policy
+from model_free.blackjack.agents.agent import MC_ES_BlackjackAgent
 
-BlackJackObsT = tuple[int, int, bool]
+BlackJackObsT = tuple[int, int, int]
 BlackJackActT = int
 BlackJackPolicyT = dict[BlackJackObsT, dict[BlackJackActT, float]]
 
@@ -17,7 +17,7 @@ HIT = 1
 class SARSA_BlackjackAgent(MC_ES_BlackjackAgent):
     """
     """
-    def __init__(self, env: Env, gamma: float, pi: BlackJackPolicyT, fixed_pi: bool=False,
+    def __init__(self, env: BlackjackEnv, gamma: float, pi: BlackJackPolicyT, fixed_pi: bool=False,
                  epsilon: float=0.1, omega: float=1, step_size: float | None=None):
         super().__init__(env, gamma, pi, fixed_pi=fixed_pi)
         self.epsilon = epsilon
@@ -102,7 +102,7 @@ class ExpSARSA_BlackjackAgent(SARSA_BlackjackAgent):
     """
     """
     
-    def __init__(self, env: Env, gamma: float, pi: BlackJackPolicyT, fixed_pi: bool=False,
+    def __init__(self, env: BlackjackEnv, gamma: float, pi: BlackJackPolicyT, fixed_pi: bool=False,
                  epsilon: float=0.1, omega: float=1, step_size: float | None=None):
         super().__init__(env, gamma, pi, fixed_pi=fixed_pi, epsilon=epsilon,
                          omega=omega, step_size=step_size)
@@ -156,7 +156,7 @@ class ExpSARSA_BlackjackAgent(SARSA_BlackjackAgent):
 class QLearning_BlackjackAgent(SARSA_BlackjackAgent):
     """
     """
-    def __init__(self, env: Env, gamma: float, pi: BlackJackPolicyT, fixed_pi: bool=False,
+    def __init__(self, env: BlackjackEnv, gamma: float, pi: BlackJackPolicyT, fixed_pi: bool=False,
                  epsilon: float=0.1, omega: float=1, step_size: float | None=None):
         super().__init__(env, gamma, pi, fixed_pi=fixed_pi, epsilon=epsilon,
                          omega=omega, step_size=step_size)

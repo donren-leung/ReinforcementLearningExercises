@@ -1,23 +1,23 @@
 import argparse
 import sys
 from pathlib import Path
+from typing import cast
 
 import gymnasium as gym
-from gymnasium import Env
-from gymnasium.spaces import Discrete
+from gymnasium.envs.toy_text.blackjack import BlackjackEnv
 import numpy as np
 from tqdm import tqdm
 
-
-from mc.blackjack.utils import parse_human_int
-from mc.blackjack.visualise import plot_policy, plot_value
-from mc.blackjack.agents.agent import MC_ES_BlackjackAgent, MC_EpsGreedy_BlackjackAgent
-from mc.blackjack.agents.TD import SARSA_BlackjackAgent, ExpSARSA_BlackjackAgent, QLearning_BlackjackAgent
+from model_free.blackjack.utils import parse_human_int
+from model_free.blackjack.visualise import plot_policy, plot_value
+from model_free.blackjack.agents.agent import MC_ES_BlackjackAgent, MC_EpsGreedy_BlackjackAgent
+from model_free.blackjack.agents.TD import SARSA_BlackjackAgent, ExpSARSA_BlackjackAgent, QLearning_BlackjackAgent
 
 def main(path: Path, agent_class: str, visualise_episodes: list[int], agent_kwargs: dict) -> None:
     N_EPISODES = max(visualise_episodes)
     GAMMA = 1.0
     env = gym.make("Blackjack-v1", sab=True)
+    env = cast(BlackjackEnv, env)
 
     policy = MC_ES_BlackjackAgent.make_sab_policy()
     fixed_pi = agent_kwargs.get("fixed_pi", False)

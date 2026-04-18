@@ -2,13 +2,12 @@ from abc import ABC, abstractmethod
 from collections import defaultdict, Counter
 from typing import Generic, Mapping, TypeAlias, TypeVar, override
 
-import gymnasium as gym
 from gymnasium import Env
-from gymnasium.spaces import Discrete
+from gymnasium.envs.toy_text.blackjack import BlackjackEnv
 
 import numpy as np
 
-from mc.blackjack.utils import argmax, soften_policy
+from model_free.blackjack.utils import argmax, soften_policy
 
 ObsType = TypeVar("ObsType")
 ActType = TypeVar("ActType")
@@ -21,6 +20,11 @@ class Agent(ABC, Generic[ObsType, ActType]):
     def __init__(self, env: Env[ObsType, ActType], gamma: float):
         self.env = env
         self.gamma = gamma
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        ...
 
     @abstractmethod
     def state_policy(self, state: ObsType) -> Mapping[ActType, float]:
@@ -35,7 +39,15 @@ class Agent(ABC, Generic[ObsType, ActType]):
     def action_value(self, state: ObsType, action: ActType) -> float:
         ...
 
-BlackJackObsT = tuple[int, int, bool]
+    @abstractmethod
+    def get_action(self, state: ObsType) -> ActType:
+        ...
+
+    @abstractmethod
+    def generate_episode(self) -> list[tuple[ObsType, ActType, float]]:
+        ...
+
+BlackJackObsT = tuple[int, int, int]
 BlackJackActT = int
 BlackJackPolicyT = dict[BlackJackObsT, dict[BlackJackActT, float]]
 
@@ -60,7 +72,7 @@ class MC_ES_BlackjackAgent(Agent[BlackJackObsT, BlackJackActT]):
                 pi(S_t) argmax [a] Q(S_t, a)
     """
     
-    def __init__(self, env: Env, gamma: float, pi: BlackJackPolicyT, fixed_pi: bool=False):
+    def __init__(self, env: BlackjackEnv, gamma: float, pi: BlackJackPolicyT, fixed_pi: bool=False):
         super().__init__(env, gamma)
         self.q: dict[tuple[BlackJackObsT, BlackJackActT], float] = defaultdict(float)
         self.pi = pi
@@ -70,6 +82,7 @@ class MC_ES_BlackjackAgent(Agent[BlackJackObsT, BlackJackActT]):
         # self.total_episodes = 0
 
     @property
+    @override
     def name(self) -> str:
         return "mc"
 
@@ -91,6 +104,7 @@ class MC_ES_BlackjackAgent(Agent[BlackJackObsT, BlackJackActT]):
         return pi
 
     @property
+    @override
     def full_policy(self) -> BlackJackPolicyT:
         raise NotImplementedError
 
@@ -98,9 +112,11 @@ class MC_ES_BlackjackAgent(Agent[BlackJackObsT, BlackJackActT]):
     def state_policy(self, state: BlackJackObsT) -> Mapping[BlackJackActT, float]:
         return self.pi[state]
 
+    @override
     def action_value(self, state: BlackJackObsT, action: BlackJackActT) -> float:
         return self.q[(state, action)]
 
+    @override
     def get_action(self, state: BlackJackObsT) -> BlackJackActT:
         action_probs = self.pi[state]
         max_prob = max(action_probs.values())
@@ -118,6 +134,7 @@ class MC_ES_BlackjackAgent(Agent[BlackJackObsT, BlackJackActT]):
         for a in action_probs.keys():
             self.pi[state][a] = 1.0 if a == best else 0.0
 
+    @override
     def generate_episode(self) -> list[tuple[BlackJackObsT, BlackJackActT, float]]:
         history = []
         obs, info = self.env.reset()
@@ -221,7 +238,7 @@ class MC_EpsGreedy_BlackjackAgent(MC_ES_BlackjackAgent):
                     pi(a|S_t) <- 1 - epsilon + epsilon / |A(S_t)| if a == A*
     """
     
-    def __init__(self, env: Env, gamma: float, pi: BlackJackPolicyT, epsilon: float=0.1):
+    def __init__(self, env: BlackjackEnv, gamma: float, pi: BlackJackPolicyT, epsilon: float=0.1):
         super().__init__(env, gamma, pi, fixed_pi=False)
         self.epsilon = epsilon
         self.pi = soften_policy(pi, epsilon)

@@ -5,7 +5,7 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.colors import ListedColormap
 
-from mc.blackjack.agents.agent import HIT, STICK
+from model_free.blackjack.agents.agent import HIT, STICK
 
 def plot_policy(policy_grids: tuple[np.ndarray, np.ndarray],
                 value_grids: tuple[np.ndarray, np.ndarray],
