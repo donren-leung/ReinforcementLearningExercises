@@ -1,6 +1,7 @@
-from typing import override
-from gymnasium import Env
+from collections import Counter
+from typing import override, Mapping
 
+from gymnasium import Env
 import numpy as np
 
 from mc.blackjack.utils import argmax, soften_policy
@@ -17,9 +18,11 @@ class SARSA_BlackjackAgent(MC_ES_BlackjackAgent):
     """
     """
     def __init__(self, env: Env, gamma: float, pi: BlackJackPolicyT, fixed_pi: bool=False,
-                 epsilon: float=0.1, final_epsilon: float=0.0, epsilon_decay: float=0.9999, step_size: float=0.1):
+                 epsilon: float=0.1, omega: float=1, step_size: float | None=None):
         super().__init__(env, gamma, pi, fixed_pi=fixed_pi)
         self.epsilon = epsilon
+        self.omega = omega
+        self.t: Mapping[tuple[BlackJackObsT, BlackJackActT], int] = Counter()
         # self.final_epsilon = final_epsilon
         # self.epsilon_decay = epsilon_decay
         self.step_size = step_size
@@ -29,7 +32,10 @@ class SARSA_BlackjackAgent(MC_ES_BlackjackAgent):
     @property
     @override
     def name(self) -> str:
-        return f"sarsa-s{self.step_size:.2f}-eps{self.epsilon:.2f}"
+        if self.step_size is not None:
+            return f"sarsa-s{self.step_size:.2f}-eps{self.epsilon:.2f}"
+        else:
+            return f"sarsa-w{self.omega:.2f}-eps{self.epsilon:.2f}"
 
     @override
     def get_action(self, state: BlackJackObsT) -> BlackJackActT:
@@ -53,8 +59,6 @@ class SARSA_BlackjackAgent(MC_ES_BlackjackAgent):
 
     @override
     def update(self, history: list[tuple[BlackJackObsT, BlackJackActT, float]]) -> None:
-        # decay epsilon
-        # self.epsilon = max(self.final_epsilon, self.epsilon * self.epsilon_decay)
         return
 
     @override
@@ -76,7 +80,11 @@ class SARSA_BlackjackAgent(MC_ES_BlackjackAgent):
             next_action = None if done else self.get_action(next_obs)
             next_q = 0 if next_action is None else self.q[(next_obs, next_action)]
 
-            self.q[(obs, action)] += self.step_size * (float(reward) + self.gamma * next_q - self.q[(obs, action)])
+            if self.step_size is None:
+                self.sa_count[(obs, action)] += 1
+                self.q[(obs, action)] += (float(reward) + self.gamma * next_q - self.q[(obs, action)]) / self.sa_count[(obs, action)]**self.omega
+            else:
+                self.q[(obs, action)] += self.step_size * (float(reward) + self.gamma * next_q - self.q[(obs, action)])
 
             if not self.fixed_pi:
                 self.optimise_policy(obs)
@@ -95,14 +103,17 @@ class ExpSARSA_BlackjackAgent(SARSA_BlackjackAgent):
     """
     
     def __init__(self, env: Env, gamma: float, pi: BlackJackPolicyT, fixed_pi: bool=False,
-                 epsilon: float=0.1, final_epsilon: float=0.0, epsilon_decay: float=0.9999, step_size: float=0.1):
+                 epsilon: float=0.1, omega: float=1, step_size: float | None=None):
         super().__init__(env, gamma, pi, fixed_pi=fixed_pi, epsilon=epsilon,
-                         final_epsilon=final_epsilon, epsilon_decay=epsilon_decay, step_size=step_size)
+                         omega=omega, step_size=step_size)
 
     @property
     @override
     def name(self) -> str:
-        return f"expsarsa-s{self.step_size:.2f}-eps{self.epsilon:.2f}"
+        if self.step_size is not None:
+            return f"expsarsa-s{self.step_size:.2f}-eps{self.epsilon:.2f}"
+        else:
+            return f"expsarsa-w{self.omega:.2f}-eps{self.epsilon:.2f}"
 
     @override
     def generate_episode(self) -> list[tuple[BlackJackObsT, BlackJackActT, float]]:
@@ -124,7 +135,11 @@ class ExpSARSA_BlackjackAgent(SARSA_BlackjackAgent):
                     for next_action, probs in self.pi[next_obs].items()
                 )
 
-            self.q[(obs, action)] += self.step_size * (float(reward) + self.gamma * exp_next_q - self.q[(obs, action)])
+            if self.step_size is None:
+                self.sa_count[(obs, action)] += 1
+                self.q[(obs, action)] += (float(reward) + self.gamma * exp_next_q - self.q[(obs, action)]) / self.sa_count[(obs, action)]**self.omega
+            else:
+                self.q[(obs, action)] += self.step_size * (float(reward) + self.gamma * exp_next_q - self.q[(obs, action)])
 
             if not self.fixed_pi:
                 self.optimise_policy(obs)
@@ -142,14 +157,17 @@ class QLearning_BlackjackAgent(SARSA_BlackjackAgent):
     """
     """
     def __init__(self, env: Env, gamma: float, pi: BlackJackPolicyT, fixed_pi: bool=False,
-                 epsilon: float=0.1, final_epsilon: float=0.0, epsilon_decay: float=0.9999, step_size: float=0.1):
+                 epsilon: float=0.1, omega: float=1, step_size: float | None=None):
         super().__init__(env, gamma, pi, fixed_pi=fixed_pi, epsilon=epsilon,
-                         final_epsilon=final_epsilon, epsilon_decay=epsilon_decay, step_size=step_size)
+                         omega=omega, step_size=step_size)
 
     @property
     @override
     def name(self) -> str:
-        return f"qlearning-s{self.step_size:.2f}-eps{self.epsilon:.2f}"
+        if self.step_size is not None:
+            return f"qlearning-s{self.step_size:.2f}-eps{self.epsilon:.2f}"
+        else:
+            return f"qlearning-w{self.omega:.2f}-eps{self.epsilon:.2f}"
 
     @override
     def generate_episode(self) -> list[tuple[BlackJackObsT, BlackJackActT, float]]:
@@ -171,7 +189,11 @@ class QLearning_BlackjackAgent(SARSA_BlackjackAgent):
                     for next_action in self.pi[next_obs].keys()
                 )
 
-            self.q[(obs, action)] += self.step_size * (float(reward) + self.gamma * max_next_q - self.q[(obs, action)])
+            if self.step_size is None:
+                self.sa_count[(obs, action)] += 1
+                self.q[(obs, action)] += (float(reward) + self.gamma * max_next_q - self.q[(obs, action)]) / self.sa_count[(obs, action)]**self.omega
+            else:
+                self.q[(obs, action)] += self.step_size * (float(reward) + self.gamma * max_next_q - self.q[(obs, action)])
 
             if not self.fixed_pi:
                 self.optimise_policy(obs)

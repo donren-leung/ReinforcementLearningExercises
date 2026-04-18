@@ -65,7 +65,7 @@ def plot_policy(policy_grids: tuple[np.ndarray, np.ndarray],
             if optimal_pi:
                 value_ax.set_title(r"$v_{*}$", fontsize=30, va="bottom")
             else:
-                value_ax.set_title(r"$v^{\pi}$", fontsize=30, va="bottom")
+                value_ax.set_title(r"$v_{\pi}$", fontsize=30, va="bottom")
         wf = value_ax.plot_wireframe(X, Y, value_grid, rstride=1, cstride=1)
         wf.set_clip_on(False)
         style_blackjack_ax(value_ax, row_index, show_labels=True,

@@ -127,7 +127,7 @@ if __name__ == "__main__":
     sarsa.add_argument("--qlearn", action="store_true", help="Use Q-learning instead of SARSA (off-policy updates)")
 
     sarsa.add_argument("--epsilon", type=float, default=0.1, help="Epsilon value for epsilon-greedy policy (default: 0.1)")
-    sarsa.add_argument("--step-size", type=float, default=0.01, help="Step size (alpha) for SARSA updates (default: 0.01)")
+    sarsa.add_argument("--step-size", type=float, help="Step size (alpha) for SARSA updates (default: 0.01)")
     sarsa.add_argument("results_folder", type=Path, help="Folder to save generated figures and results")
     sarsa.add_argument("snapshots", nargs="+", type=parse_human_int, help="Episodes at which to take snapshots for visualisation (e.g. 10k 500k)")
 
@@ -136,12 +136,15 @@ if __name__ == "__main__":
 
     fixed_pi=args.mode == "eval" if args.algo in ["es", "sarsa"] else False
     epsilon=args.epsilon if args.algo in ["epsgreedy", "sarsa"] else None
-    step_size=args.step_size if args.algo == "sarsa" else None
     
-    assert not (args.exp and args.qlearn), "Cannot specify both --exp and --qlearn flags"
-    sarsa_variant = "exp_sarsa" if args.exp else "qlearning" if args.qlearn else "sarsa"
-    agent_class = sarsa_variant if args.algo == "sarsa" else args.algo
+    step_size = None
+    agent_class = args.algo
 
+    if args.algo == "sarsa":
+        step_size = args.step_size
+        assert not (args.exp and args.qlearn), "Cannot specify both --exp and --qlearn flags"
+        sarsa_variant = "exp_sarsa" if args.exp else "qlearning" if args.qlearn else "sarsa"
+        agent_class = sarsa_variant
 
     main(args.results_folder, agent_class, visualise_episodes=args.snapshots,
          agent_kwargs={
