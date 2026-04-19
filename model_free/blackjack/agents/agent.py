@@ -87,7 +87,7 @@ class MC_ES_BlackjackAgent(Agent[BlackJackObsT, BlackJackActT]):
         return "mc"
 
     @classmethod
-    def make_sab_policy(cls) -> BlackJackPolicyT:
+    def make_sab_policy(cls, threshold: int=20) -> BlackJackPolicyT:
         """
         Initial policy from Sutton & Barto:
         stick on 20 or 21, hit otherwise.
@@ -97,7 +97,7 @@ class MC_ES_BlackjackAgent(Agent[BlackJackObsT, BlackJackActT]):
             for dealer_showing in range(1, 11):
                 for usable_ace in (False, True):
                     s = (player_sum, dealer_showing, usable_ace)
-                    if player_sum >= 20:
+                    if player_sum >= threshold:
                         pi[s] = {STICK: 1.0, HIT: 0.0}
                     else:
                         pi[s] = {STICK: 0.0, HIT: 1.0}
