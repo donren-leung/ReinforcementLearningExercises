@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Callable, Tuple
 from pathlib import Path
+import re
 import os
 import json
 import numpy as np
@@ -201,8 +202,10 @@ def do_parameter_search(cache_folder: Path, params: list[dict], sims: int, sim_l
 
     for spec in params:
         agent_cls = spec.get('class')
+        assert agent_cls is not None, f"Missing 'class' in spec: {spec}"
         series_name = spec.get('name', getattr(agent_cls, '__name__', 'agent'))
         plot_colour = spec.get('plot_colour', 'black')
+        hyper_label = spec.get('hyper_name')
 
         # find the single hyperparameter key whose value is a list/tuple
         list_keys = [k for k, v in spec.items() if isinstance(v, (list, tuple))]
@@ -215,13 +218,13 @@ def do_parameter_search(cache_folder: Path, params: list[dict], sims: int, sim_l
         hyper_key = list_keys[0]
         values = list(spec[hyper_key])
 
-        results[series_name] = (plot_colour, hyper_key, {})
+        results[series_name] = (plot_colour, hyper_label or hyper_key, {})
 
         for val in values:
             # build agent kwargs: copy scalar entries, replace list with current val
             agent_kwargs: dict = {}
             for k, v in spec.items():
-                if k in ('class', 'name', 'plot_colour'):
+                if k in ('class', 'name', 'plot_colour', 'hyper_name'):
                     continue
                 if k == hyper_key and isinstance(v, (list, tuple)):
                     agent_kwargs[k] = val
@@ -274,14 +277,14 @@ def do_parameter_search(cache_folder: Path, params: list[dict], sims: int, sim_l
             n_steps = int(agg.get('n_steps', mean_reward.size))
 
             # area under learning curve (normalized per step)
-            auc = float(np.trapz(mean_reward))
+            auc = float(np.trapezoid(mean_reward))
             avg_per_step = auc / float(n_steps)
 
             results[series_name][2][float(val)] = avg_per_step
 
     return results
 
-def figure_2_6(results_folder: str, datapoints: dict, sims: int, sim_length: int):
+def figure_2_6(results_folder: str, datapoints: dict, sims: int, sim_length: int, name: str=""):
     # datapoints: { series_name: (plot_colour, hyperparameter_name, {x_val: y_val, ...}), ... }
     if not datapoints:
         print("No datapoints provided to figure_2_6")
@@ -306,6 +309,7 @@ def figure_2_6(results_folder: str, datapoints: dict, sims: int, sim_length: int
 
     # plot each series
     for series_name, (colour, hyperparameter_name, mapping) in datapoints.items():
+        series_name = re.sub(r'alpha', r'$\\alpha$', series_name, flags=re.IGNORECASE)
         # sort by x value (keys may be numeric already)
         items = sorted(mapping.items(), key=lambda t: float(t[0]))
         x = [float(t[0]) for t in items]
@@ -315,6 +319,8 @@ def figure_2_6(results_folder: str, datapoints: dict, sims: int, sim_length: int
 
     if use_log_x:
         ax.set_xscale('log')
+        ax.tick_params(axis="both", which="major", direction="in")
+        ax.minorticks_off()
 
     # Set x ticks to powers of two that cover the data range
     if numeric_x:
@@ -341,7 +347,7 @@ def figure_2_6(results_folder: str, datapoints: dict, sims: int, sim_length: int
                 ax.set_xticklabels(tick_labels)
 
     # rotate the y axis label by 90 degrees
-    ax.set_ylabel(f'Average\nreward\nacross\n{sims} runs', rotation=0, labelpad=30)
+    ax.set_ylabel(f'Average\nreward\nacross\n{sims} runs', rotation=0, labelpad=40, va='center', fontsize=12)
 
     # remove grid marks
     ax.grid(False)
@@ -352,21 +358,25 @@ def figure_2_6(results_folder: str, datapoints: dict, sims: int, sim_length: int
     # Replace the x-axis label area with coloured hyperparameter names
     # Place one coloured text per series below the x-axis
     num = len(datapoints)
+    old_rcParams = plt.rcParams["mathtext.fontset"]
+    plt.rcParams["mathtext.fontset"] = "cm"
     if num:
         # small horizontal margins
-        left = 0.05
-        right = 0.95
+        left = 0.25
+        right = 0.75
         span = right - left
         step = span / max(1, num)
         for idx, (series_name, (colour, hyperparameter_name, mapping)) in enumerate(datapoints.items()):
             tx = left + step * idx + step / 2
-            ax.text(tx, -0.18, f'{hyperparameter_name}', transform=ax.transAxes,
-                    color=colour, fontsize=10, ha='center', va='top', clip_on=False)
+            ax.text(tx, -0.08, f'{hyperparameter_name}', transform=ax.transAxes,
+                    color=colour, fontsize=20, ha='center', va='top', clip_on=False)
+    plt.rcParams["mathtext.fontset"] = old_rcParams
 
     # make space for the coloured labels
-    fig.subplots_adjust(bottom=0.2)
+    fig.tight_layout()
+    fig.subplots_adjust(bottom=0.14)
 
-    out_path = os.path.join(results_folder, f'parameter_search_{sims}_{sim_length}.png')
+    out_path = os.path.join(results_folder, f'parameter_search_{sims}_{sim_length}{name}.png')
     fig.savefig(out_path, dpi=200)
     plt.close(fig)
 
@@ -431,6 +441,7 @@ if __name__ == "__main__":
             'plot_colour': 'red',
             'Q0': 0,
             'alpha': None,
+            'hyper_name': r'$\epsilon$',
             'epsilon' : [1/128, 1/64, 1/32, 1/16, 1/8, 1/4],
         },
         {
@@ -438,12 +449,14 @@ if __name__ == "__main__":
             'name': 'Greedy with Optimistic Init, alpha=0.1',
             'plot_colour': 'black',
             'alpha': 0.1,
+            'hyper_name': r'$Q_0$',
             'Q0' : [1/4, 1/2, 1, 2, 4],
         },
         {
             'class': UCBAgent,
             'name': 'UCB',
             'plot_colour': 'blue',
+            'hyper_name': r'$c$',
             'c': [1/128, 1/64, 1/32, 1/16, 1/8, 1/4, 1/2, 1, 2, 4],
         },
         {
@@ -451,6 +464,7 @@ if __name__ == "__main__":
             'name': 'Policy Gradient',
             'plot_colour': 'limegreen',
             'use_baseline': True,
+            'hyper_name': r'$\alpha$',
             'alpha': [1/64, 1/32, 1/16, 1/8, 1/4, 1/2, 1, 2, 4],
         },
         {
@@ -464,7 +478,7 @@ if __name__ == "__main__":
     ]
 
     data_points = do_parameter_search(Path(results_folder) / "cache", params, 2000, 1000)
-    figure_2_6(results_folder, data_points, 2000, 1000)
+    figure_2_6(results_folder, data_points, 2000, 1000, name="_extended")
     
     data_points = do_parameter_search(Path(results_folder) / "cache", params, 2000, 5000)
-    figure_2_6(results_folder, data_points, 2000, 5000)
+    figure_2_6(results_folder, data_points, 2000, 5000, name="_extended")
