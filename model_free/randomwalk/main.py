@@ -44,19 +44,27 @@ def average(lst: list[float]):
     return sum(lst)/len(lst)
 
 def update_mc(V: list[float], batch: list[EpisodeT]) -> list[float]:
-    returns: list[list[float]] = [[] for _ in range(SPAN)]
-    for episode in batch:
-        G = 0
-        for step in reversed(episode):
-            state, reward = step
-            if state in [LEFT_TERMINAL, RIGHT_TERMINAL]: 
-                continue
+    def one_iter(curr_V: list[float]) -> list[float]:
+        diffs = [0.] * SPAN
+        for episode in batch:
+            G = 0
+            for step in reversed(episode):
+                state, reward = step
+                if state in [LEFT_TERMINAL, RIGHT_TERMINAL]: 
+                    continue
 
-            G = GAMMA * G + reward
-            returns[state].append(G)
+                G = GAMMA * G + reward
+                diffs[state] += ALPHA * (G - curr_V[state])
 
-    averages = [average(ret) for ret in returns]
-    return [avg if len(returns[i]) > 0 else V[i] for i, avg in enumerate(averages)]
+        return [v + dv for v, dv in zip(curr_V, diffs)]
+
+    diff = float("inf")
+    while diff > EPS:
+        new_V_mc = one_iter(V)
+        diff = max(abs(x-y) for x, y in zip(V, new_V_mc))
+        V = new_V_mc
+
+    return V
 
 def update_td(V: list[float], batch: list[EpisodeT]) -> list[float]:
     def one_iter(curr_V: list[float]) -> list[float]:
