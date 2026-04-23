@@ -32,7 +32,7 @@ def main(path: Path, agent_class: str, visualise_episodes: list[int], agent_kwar
         # epsilon_decay = agent_kwargs['epsilon_decay']
         step_size = agent_kwargs['step_size']
 
-        agent = SARSA_BlackjackAgent(env, GAMMA, policy, 
+        agent = SARSA_BlackjackAgent(env, GAMMA, policy,
                                         epsilon=epsilon,
                                         # final_epsilon=final_epsilon,
                                         # epsilon_decay=epsilon_decay,
@@ -45,7 +45,7 @@ def main(path: Path, agent_class: str, visualise_episodes: list[int], agent_kwar
         # epsilon_decay = agent_kwargs['epsilon_decay']
         step_size = agent_kwargs['step_size']
 
-        agent = ExpSARSA_BlackjackAgent(env, GAMMA, policy, 
+        agent = ExpSARSA_BlackjackAgent(env, GAMMA, policy,
                                         epsilon=epsilon,
                                         # final_epsilon=final_epsilon,
                                         # epsilon_decay=epsilon_decay,
@@ -58,7 +58,7 @@ def main(path: Path, agent_class: str, visualise_episodes: list[int], agent_kwar
         # epsilon_decay = agent_kwargs['epsilon_decay']
         step_size = agent_kwargs['step_size']
 
-        agent = QLearning_BlackjackAgent(env, GAMMA, policy, 
+        agent = QLearning_BlackjackAgent(env, GAMMA, policy,
                                         epsilon=epsilon,
                                         # final_epsilon=final_epsilon,
                                         # epsilon_decay=epsilon_decay,
@@ -72,9 +72,9 @@ def main(path: Path, agent_class: str, visualise_episodes: list[int], agent_kwar
     snapshots: list[tuple[int, tuple[np.ndarray, np.ndarray]]] = []
     sum_rewards = 0
     for episode in tqdm(range(1, N_EPISODES + 1), desc="Episodes"):
-        history = agent.generate_episode()
-        sum_rewards += sum(r for _, _, r in history)
-        agent.update(history)
+        trajectory = agent.generate_episode()
+        sum_rewards += sum(r for _, _, r in trajectory)
+        agent.update(trajectory)
 
         if episode in visualise_episodes:
             value_grids = (agent.build_value_grid(True), agent.build_value_grid(False))
@@ -122,7 +122,7 @@ if __name__ == "__main__":
     # TD control
     sarsa = subparsers.add_parser("sarsa", help="SARSA MC")
     sarsa.add_argument("mode", choices=["eval", "iter"], help="Mode to run: 'eval' runs evaluation flows; 'iter' runs policy iteration")
-    
+
     sarsa.add_argument("--exp", action="store_true", help="Use Expected SARSA instead of SARSA")
     sarsa.add_argument("--qlearn", action="store_true", help="Use Q-learning instead of SARSA (off-policy updates)")
 
@@ -136,7 +136,7 @@ if __name__ == "__main__":
 
     fixed_pi=args.mode == "eval" if args.algo in ["es", "sarsa"] else False
     epsilon=args.epsilon if args.algo in ["epsgreedy", "sarsa"] else None
-    
+
     step_size = None
     agent_class = args.algo
 
@@ -145,6 +145,9 @@ if __name__ == "__main__":
         assert not (args.exp and args.qlearn), "Cannot specify both --exp and --qlearn flags"
         sarsa_variant = "exp_sarsa" if args.exp else "qlearning" if args.qlearn else "sarsa"
         agent_class = sarsa_variant
+
+    # Check results folder exists
+    args.results_folder.mkdir(parents=True, exist_ok=True)
 
     main(args.results_folder, agent_class, visualise_episodes=args.snapshots,
          agent_kwargs={
