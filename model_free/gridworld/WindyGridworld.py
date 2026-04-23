@@ -15,7 +15,7 @@ GridObsT: TypeAlias = tuple[int, int]
 GridActT: TypeAlias = int
 
 class WindyGridworldEnv(gym.Env[GridObsT, GridActT]):
-    def __init__(self, king_moves: bool=False):
+    def __init__(self, king_moves: bool=False, stoch: bool=False):
         self.height = 7
         self.width = 10
         self.action_space = spaces.Discrete(4)  # Up, Down, Left, Right
@@ -41,6 +41,7 @@ class WindyGridworldEnv(gym.Env[GridObsT, GridActT]):
             })
             self.action_space = spaces.Discrete(8)
 
+        self.stoch = stoch
         self.wind_strengths = [0, 0, 0, -1, -1, -1, -2, -2, -1, 0]
         self.s = self._initial_state
 
@@ -77,9 +78,11 @@ class WindyGridworldEnv(gym.Env[GridObsT, GridActT]):
 
         prev_y, prev_x = self.s
         dy, dx = self.moves[action]
-        # dy += self.wind_strengths[self.s[1]]
+        wind = self.wind_strengths[self.s[1]]
+        if self.stoch and abs(wind) > 0:
+            wind += np.random.choice([-1, 0, +1])
 
-        new_y = max(0, min(self.height - 1, prev_y + dy + self.wind_strengths[self.s[1]]))
+        new_y = max(0, min(self.height - 1, prev_y + dy + wind))
         new_x = max(0, min(self.width - 1, prev_x + dx))
 
         self.s = (new_y, new_x)
