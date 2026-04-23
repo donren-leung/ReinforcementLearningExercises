@@ -39,7 +39,7 @@ import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from tqdm import tqdm
 
-from model_free.blackjack.agents.agent import HIT, STICK, BlackJackActT, BlackJackObsT, BlackJackPolicyT, MC_ES_BlackjackAgent
+from model_free.blackjack.agents.MC import HIT, STICK, BlackJackActT, BlackJackObsT, BlackJackPolicyT, MC_ES_BlackjackAgent
 
 class ImportanceSampling_BlackjackAgent(MC_ES_BlackjackAgent):
     """

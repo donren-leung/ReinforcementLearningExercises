@@ -4,8 +4,8 @@ from typing import override, Mapping
 from gymnasium.envs.toy_text.blackjack import BlackjackEnv
 import numpy as np
 
-from model_free.blackjack.utils import argmax, soften_policy
-from model_free.blackjack.agents.agent import MC_ES_BlackjackAgent
+from model_free.agents.utils import argmax, soften_policy
+from model_free.blackjack.agents.MC import MC_ES_BlackjackAgent
 
 BlackJackObsT = tuple[int, int, int]
 BlackJackActT = int

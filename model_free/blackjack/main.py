@@ -8,9 +8,9 @@ from gymnasium.envs.toy_text.blackjack import BlackjackEnv
 import numpy as np
 from tqdm import tqdm
 
-from model_free.blackjack.utils import parse_human_int
+from model_free.agents.utils import parse_human_int
 from model_free.blackjack.visualise import plot_policy, plot_value
-from model_free.blackjack.agents.agent import MC_ES_BlackjackAgent, MC_EpsGreedy_BlackjackAgent
+from model_free.blackjack.agents.MC import MC_ES_BlackjackAgent, MC_EpsGreedy_BlackjackAgent
 from model_free.blackjack.agents.TD import SARSA_BlackjackAgent, ExpSARSA_BlackjackAgent, QLearning_BlackjackAgent
 
 def main(path: Path, agent_class: str, visualise_episodes: list[int], agent_kwargs: dict) -> None:
