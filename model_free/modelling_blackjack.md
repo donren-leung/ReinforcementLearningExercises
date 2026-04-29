@@ -70,13 +70,13 @@ However, this creates a mismatch because trajectories are sampled from mu, but w
 
 Figure D compares ordinary and weighted importance sampling for off-policy MC prediction in blackjack. The ordinary importance sampling is unbiased: in expectation, its estimate equals the true value for any number of episodes. However, this comes at the cost of extremely high variance, indicative of its sensitivity to rare trajectories with large importance weights. In contrast, weighted importance sampling has small variance and some bias that converges to zero after not that many episodes.
 
-The reason why the std of weighted importance sampling grows from 1 to around 10 is that an independent run may wait for many episodes before the first nonzero-weight episode. Before such appears, the estimate will stay at zero. Std grows because initial estimates will vary; in fact, for the first nonzero-weight episode, the ratio cancels out leaving G (which is a sample from mu conditioned on matching pi with nonzero-weight). Over time, more nonzero-weight returns contribute to each estimate, making the weighted average more stable and reducing the standard deviation.
+The reason why the variance of weighted importance sampling grows from episode 1 to ~10 is that a particular simulation may need many episodes before getting the first one with nonzero-weight. Before such appears, the estimate will stay at zero. Variance grows because initial estimates will vary; in fact, for the first nonzero-weight episode, the ratio cancels out leaving G (which is a sample from mu conditioned on matching pi with nonzero-weight). Over time, more nonzero-weight returns contribute to each estimate, making the weighted average more stable and reducing the variance.
 
 <html>
     <img src="./blackjack/results/is/50_50/importance_sampling_estimates_l1000_r10000.png" alt="figure" width="800">
 </html>
 
-**Figure 5.3:** Mean estimates of the "stick on 20/21" strategy using ordinary and weighted importance sampling of trajectories from player 13 with ace and dealer 2, from off-policy (50-50 hit/stick) episodes.
+**Figure 5.3:** Mean and 1 stddev of estimates of the "stick on 20/21" strategy using ordinary and weighted importance sampling of trajectories from player 13 with ace and dealer 2, from off-policy (50-50 hit/stick) episodes.
 
 ## Appendix
 
@@ -95,17 +95,15 @@ Top: 10k simulations, bottom: 100k simulations.
 
 ### Behaviour-Target Similarity
 
-The similarity of the behaviour policy to target policy affects convergence of weighted IS (Supplementary Figure B). The more different to target, the fewer nonzero-weight episodes and slower convergence -- since they are rarer, weights are enormous in ordinary IS, explaining the huge variance.
+The similarity of the behaviour policy to target policy affects convergence of weighted IS (Supplementary Figure B). The more mu is different to the greedy target, the fewer nonzero-weight episodes and slower convergence -- because they are rarer, weights are enormous in ordinary IS, explaining the huge variance.
 
-**Reason why weighted IS drifts upward for 10% hit policy:**
+**Why weighted IS drifts downward for the 90% hit policy:**
 
-Target-consistent paths are those that hit with 10% until reaching 20/21, then stick with 90%, or hit with 10% until bust (less likely since you need multiple 10% hits). In other words, target-consistent episodes are rare, and amongst these, the most likely are the shortest ones.
+Target-consistent paths are those that hit with 90% until reaching 20/21, then either stick with 10%, or hit with 90% until bust. The latter is more likely since you don't need the 10% stick. This means *on average*, early weighted estimate are more likely to be losing trajectories than winning ones. Over time, more target-consistent episodes of all kinds are observed (such as a rare hit-to-20/21-stick-and-win trajectory which would have high importance weight), so the estimate eventually converges toward the true value.
 
-From this state, short target-consistent episodes are often favourable ones, such as reaching 20 or 21 quickly and then sticking. Longer target-consistent episodes, including many that end badly, require multiple consecutive 10% hits and therefore appear much later. As a result, the early weighted estimate is based on an unrepresentative subset of target-consistent trajectories and is biased upward. Over time, more target-consistent episodes of all kinds are observed, and the importance weights rebalance their contributions, so the estimate converges toward the true value.
+**Why weighted IS drifts upward for the 10% hit policy:**
 
-**Reason why weighted IS drifts downward for 90% hit policy:**
-
-Target-consistent paths are those that hit with 90% until reaching 20/21, then stick with 10%, or hit with 90% until bust (more likely since you don't need the 10% stick). As a result, the early weighted estimate is based on an unrepresentative subset of target-consistent trajectories and is biased downward. Over time, more target-consistent episodes of all kinds are observed, and the importance weights rebalance their contributions, so the estimate converges toward the true value.
+Same logic as above, just vice-versa.
 
 <html>
     <img src="./blackjack/results/is/hit90/importance_sampling_estimates_l10000_r1000_hit0.90.png" alt="figure" width="800">
@@ -113,4 +111,4 @@ Target-consistent paths are those that hit with 90% until reaching 20/21, then s
     <img src="./blackjack/results/is/hit10/importance_sampling_estimates_l10000_r10000_hit0.10.png" alt="figure" width="800">
 </html>
 
-**Supplementary Figure B:** Mean estimates of the "stick on 20/21" strategy using ordinary and weighted importance sampling of off-policy trajectories from player 13 with ace and dealer 2. Top: 90-10 hit/stick, bottom: 10-90 hit/stick.
+**Supplementary Figure B:** Mean and 1 stddev of estimates of the "stick on 20/21" strategy using ordinary and weighted importance sampling of off-policy trajectories from player 13 with ace and dealer 2. Top: 90-10 hit/stick, bottom: 10-90 hit/stick.
